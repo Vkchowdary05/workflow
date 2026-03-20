@@ -1,0 +1,241 @@
+{
+  "$schema": "https://quantixone.com/schemas/workflow/v1.0.0",
+  "format": "quantixone-workflow",
+  "format_version": "1.0.0",
+
+  "export_metadata": {
+    "exported_at": "2026-03-18T10:00:00Z",
+    "exported_by": "user_abc123",
+    "exported_from_tenant": "tenant_xyz",
+    "source_environment": "production",
+    "tool": "quantixone-workflow-builder"
+  },
+
+  "workflow": {
+
+    "meta": {
+      "workflow_id": "wf_a1b2c3d4",
+      "name": "New Lead Nurture Sequence",
+      "description": "Triggered when a new contact is created. Sends welcome email, waits 2 days, then checks if the contact opened the email. If yes, sends a follow-up SMS. If no, moves the opportunity to the 'Cold' stage.",
+      "version": 3,
+      "tags": ["lead-nurture", "email", "sms"],
+      "category": "marketing",
+      "is_template": false,
+      "created_at": "2026-01-15T08:00:00Z",
+      "updated_at": "2026-03-17T14:22:00Z"
+    },
+
+    "settings": {
+      "status": "active",
+      "execution_mode": "async",
+      "timeout_seconds": 604800,
+      "max_retries": 3,
+      "retry_delay_seconds": 60,
+      "allow_concurrent_executions": false,
+      "execution_cooldown_seconds": 3600,
+      "timezone": "America/Los_Angeles"
+    },
+
+    "trigger": {
+      "type": "contact_created",
+      "label": "Contact Created",
+      "config": {
+        "filters": {
+          "source": ["web-form", "manual"],
+          "tags_include_any": ["lead"],
+          "tags_exclude_all": ["customer", "unsubscribed"]
+        }
+      }
+    },
+
+    "steps": [
+
+      {
+        "id": "step_1",
+        "type": "action",
+        "action_type": "send_email",
+        "label": "Send Welcome Email",
+        "config": {
+          "to": "{{contact.email}}",
+          "from": "{{tenant.channels.email.from_address}}",
+          "subject": "Welcome to {{tenant.name}}, {{contact.first_name}}!",
+          "template_id": "tpl_welcome_001",
+          "variables": {
+            "contact_name": "{{contact.first_name}}",
+            "company_name": "{{tenant.name}}",
+            "cta_link": "https://app.example.com/onboarding"
+          },
+          "track_opens": true,
+          "track_clicks": true
+        },
+        "on_success": "step_2",
+        "on_failure": "step_error",
+        "retry_policy": {
+          "max_attempts": 3,
+          "backoff": "exponential"
+        },
+        "position": { "x": 100, "y": 200 }
+      },
+
+      {
+        "id": "step_2",
+        "type": "delay",
+        "label": "Wait 2 Days",
+        "config": {
+          "duration": 2,
+          "unit": "days",
+          "skip_weekends": false,
+          "resume_at_time": null
+        },
+        "on_complete": "step_3",
+        "position": { "x": 100, "y": 380 }
+      },
+
+      {
+        "id": "step_3",
+        "type": "condition",
+        "condition_type": "if_else",
+        "label": "Did Contact Open Email?",
+        "config": {
+          "operator": "AND",
+          "rules": [
+            {
+              "field": "step_1.email_opened",
+              "operator": "equals",
+              "value": true
+            }
+          ]
+        },
+        "branches": {
+          "true": "step_4",
+          "false": "step_5"
+        },
+        "position": { "x": 100, "y": 540 }
+      },
+
+      {
+        "id": "step_4",
+        "type": "action",
+        "action_type": "send_sms",
+        "label": "Send Follow-up SMS",
+        "config": {
+          "to": "{{contact.phone}}",
+          "from": "{{tenant.channels.sms.from_number}}",
+          "body": "Hi {{contact.first_name}}, saw you opened our email! Ready to chat? Reply YES.",
+          "template_id": null
+        },
+        "on_success": "step_6",
+        "on_failure": "step_error",
+        "position": { "x": 50, "y": 720 }
+      },
+
+      {
+        "id": "step_5",
+        "type": "action",
+        "action_type": "move_pipeline",
+        "label": "Move to Cold Stage",
+        "config": {
+          "pipeline_id": "{{config.default_pipeline_id}}",
+          "target_stage": "cold",
+          "note": "Contact did not engage with welcome email after 2 days."
+        },
+        "on_success": "step_6",
+        "on_failure": "step_error",
+        "position": { "x": 250, "y": 720 }
+      },
+
+      {
+        "id": "step_6",
+        "type": "action",
+        "action_type": "add_tag",
+        "label": "Tag as Nurtured",
+        "config": {
+          "contact_id": "{{trigger.contact_id}}",
+          "tags": ["nurtured", "sequence-complete"]
+        },
+        "on_success": null,
+        "on_failure": "step_error",
+        "position": { "x": 150, "y": 900 }
+      },
+
+      {
+        "id": "step_error",
+        "type": "action",
+        "action_type": "update_contact",
+        "label": "Flag Execution Error",
+        "config": {
+          "contact_id": "{{trigger.contact_id}}",
+          "field_updates": {
+            "workflow_error": true,
+            "last_error_workflow": "{{workflow.workflow_id}}",
+            "last_error_at": "{{now}}"
+          }
+        },
+        "on_success": null,
+        "on_failure": null,
+        "position": { "x": 400, "y": 540 }
+      }
+
+    ],
+
+    "canvas_layout": {
+      "zoom": 1.0,
+      "pan": { "x": 0, "y": 0 },
+      "node_positions": {
+        "trigger": { "x": 100, "y": 40 },
+        "step_1": { "x": 100, "y": 200 },
+        "step_2": { "x": 100, "y": 380 },
+        "step_3": { "x": 100, "y": 540 },
+        "step_4": { "x": 50, "y": 720 },
+        "step_5": { "x": 250, "y": 720 },
+        "step_6": { "x": 150, "y": 900 },
+        "step_error": { "x": 400, "y": 540 }
+      }
+    },
+
+    "variable_map": {
+      "description": "All template variables used in this workflow and their sources.",
+      "variables": [
+        { "key": "contact.email", "source": "trigger_payload", "path": "contact.email" },
+        { "key": "contact.first_name", "source": "trigger_payload", "path": "contact.first_name" },
+        { "key": "contact.phone", "source": "trigger_payload", "path": "contact.phone" },
+        { "key": "tenant.name", "source": "tenant_config", "path": "name" },
+        { "key": "tenant.channels.email.from_address", "source": "tenant_config", "path": "channels.email.from_address" },
+        { "key": "tenant.channels.sms.from_number", "source": "tenant_config", "path": "channels.sms.from_number" },
+        { "key": "config.default_pipeline_id", "source": "workflow_config", "path": "default_pipeline_id" },
+        { "key": "step_1.email_opened", "source": "step_output", "step_id": "step_1", "path": "email_opened" },
+        { "key": "trigger.contact_id", "source": "trigger_payload", "path": "contact_id" },
+        { "key": "workflow.workflow_id", "source": "execution_context", "path": "workflow_id" },
+        { "key": "now", "source": "system", "path": "current_timestamp" }
+      ]
+    }
+
+  },
+
+  "import_config": {
+    "description": "Controls how this workflow behaves when imported into a new tenant or environment.",
+    "on_conflict": "create_new",
+    "conflict_strategies": {
+      "same_workflow_id_exists": "create_new",
+      "same_name_exists": "rename_with_suffix"
+    },
+    "import_as_status": "inactive",
+    "resolve_references": {
+      "template_ids": "warn_if_missing",
+      "pipeline_ids": "prompt_user",
+      "channel_credentials": "use_tenant_defaults"
+    }
+  },
+
+  "required_features": {
+    "channels": ["email", "sms"],
+    "actions": ["send_email", "send_sms", "move_pipeline", "add_tag", "update_contact"],
+    "triggers": ["contact_created"],
+    "tenant_config_keys": [
+      "channels.email.from_address",
+      "channels.sms.from_number"
+    ]
+  },
+
+  "checksum": "sha256:3f4a9b2c1d8e5f7a0b6c4d2e9f1a3b5c7d9e0f2a4b6c8d1e3f5a7b9c0d2e4f"
+}
