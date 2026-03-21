@@ -4,92 +4,199 @@ A high-performance backend system for a Zapier-like workflow automation platform
 
 ## 🚀 Tech Stack
 
-- **Framework**: [FastAPI](https://fastapi.tiangolo.com/) - A modern, fast (high-performance), web framework for building APIs with Python 3.8+ based on standard Python type hints.
-- **Database**: [MongoDB (Atlas)](https://www.mongodb.com/) - NoSQL database used for storing highly flexible JSON-like workflow schemas and execution logs.
-- **Database Driver**: [Motor](https://motor.readthedocs.io/) - Asynchronous Python driver for MongoDB, ensuring non-blocking database queries in the async event loop.
-- **Data Validation**: [Pydantic](https://docs.pydantic.dev/) - Data validation and settings management using python type annotations.
-- **Environment Management**: [python-dotenv](https://saurabh-kumar.com/python-dotenv/) - For loading environment variables from a `.env` file.
+- **Framework**: [FastAPI](https://fastapi.tiangolo.com/) - Modern, fast Python web framework.
+- **Database**: [MongoDB (Atlas)](https://www.mongodb.com/) - NoSQL database for flexible JSON-level schema.
+- **Driver**: [Motor](https://motor.readthedocs.io/) - Async Python driver for MongoDB.
+- **Validation**: [Pydantic](https://docs.pydantic.dev/) - Data validation and parsing.
 
 ## 🏗️ Architecture Layering
 
-The codebase strictly adheres to a layered architecture pattern to separate concerns and ensure maintainability:
-
-1. **Routes Layer (`app/routes/`)**: Handles incoming HTTP requests, validates payloads using Pydantic models, and returns responses. Contains no business logic.
-2. **Service Layer (`app/services/`)**: The core of the application. Contains all business logic, workflow validation, cycle detection, and the DAG execution engine.
-3. **Repository Layer (`app/repositories/`)**: Manages all direct database interactions. Ensures the service layer is decoupled from MongoDB specifics.
-4. **Database Core (`app/core/database.py`)**: Manages the Motor client lifecycle asynchronously using FastAPI's lifespan events.
-
-## 🌟 Core Features
-
-- **Workflow Management**: Create, Read, Update, and Delete workflow configurations.
-- **DAG Validation Engine**: Validates workflows before saving:
-  - Ensures unique step IDs.
-  - Verifies all step references (e.g., `on_success`, `branches`) link to existing steps.
-  - Implements Depth-First Search (DFS) to prevent circular dependencies (cycles) in the workflow graph.
-- **Execution Engine**: Simulates the execution of a workflow step-by-step:
-  - Handles sequential actions.
-  - Simulates condition branching (`true`/`false`).
-  - Simulates delays.
-  - Generates comprehensive execution logs for each step.
-- **Domain Modules**:
-  - **Contacts**: Full CRUD capabilities and tag management (with deduplication).
-  - **Opportunities (CRM)**: Pipeline management enabling users to track contact deals through various stages.
-
-## 📂 Project Structure
-
-```text
-app/
-├── core/
-│   ├── database.py         # MongoDB connection lifecycle events
-├── models/                 # Pydantic schemas for data validation
-│   ├── contact.py
-│   ├── execution.py
-│   ├── opportunity.py
-│   └── workflow.py
-├── repositories/           # Database operations
-│   ├── contact_repo.py
-│   ├── execution_repo.py
-│   ├── opportunity_repo.py
-│   └── workflow_repo.py
-├── routes/                 # FastAPI API endpoints
-│   ├── contact_routes.py
-│   ├── execution_routes.py
-│   ├── opportunity_routes.py
-│   └── workflow_routes.py
-├── services/               # Business logic and DAG Engine
-│   ├── action_service.py
-│   ├── contact_service.py
-│   ├── execution_service.py
-│   ├── opportunity_service.py
-│   ├── validation_service.py
-│   └── workflow_service.py
-└── main.py                 # Application entry point
-```
+1. **Routes (`app/routes/`)**: FastAPI endpoints and Pydantic validation.
+2. **Services (`app/services/`)**: Core application logic (workflow DAG validation, execution engine).
+3. **Repositories (`app/repositories/`)**: Async MongoDB operations using Motor.
 
 ## 🛠️ Setup & Installation
 
-### 1. Prerequisites
-- Python 3.10+
-- A MongoDB cluster (e.g., MongoDB Atlas)
+1. **Install Dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
+2. **Environment Variables**
+   Create a `.env` file in the root directory:
+   ```env
+   MONGODB_URL=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/workflow_automation?retryWrites=true&w=majority
+   ```
+3. **Run the Server**
+   ```bash
+   uvicorn app.main:app --reload
+   ```
+4. **Interactive Docs**: `http://localhost:8000/docs`
 
-### 2. Install Dependencies
+---
+
+## 📡 API Reference & cURL Examples
+
+Below is a complete reference of the available APIs and how to test them using `curl` from your terminal.
+
+> **Note:** Replace `{workflow_id}`, `{contact_id}`, etc., with actual MongoDB ObjectIds returned by the `POST` endpoints.
+
+
+### 1. Workflows API
+
+**Create a Workflow** (with DAG validation)
 ```bash
-pip install -r requirements.txt
+curl -X POST http://localhost:8000/workflows \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Onboarding Workflow",
+    "description": "Triggered when contact is created",
+    "trigger": {
+      "type": "contact_created",
+      "label": "Contact Created"
+    },
+    "steps": [
+      {
+        "id": "step_1",
+        "type": "action",
+        "action_type": "send_email",
+        "config": { "to": "{{contact.email}}" },
+        "on_success": "step_2"
+      },
+      {
+        "id": "step_2",
+        "type": "delay",
+        "config": { "duration": 1, "unit": "days" },
+        "on_complete": "step_3"
+      },
+      {
+        "id": "step_3",
+        "type": "action",
+        "action_type": "add_tag",
+        "config": { "tags": ["onboarded"] }
+      }
+    ]
+  }'
 ```
 
-### 3. Environment Variables
-Create a `.env` file in the root directory (alongside `requirements.txt`) and provide your MongoDB connection string:
-```env
-MONGODB_URL=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/workflow_automation?retryWrites=true&w=majority
-```
-
-### 4. Run the Server
+**List Workflows**
 ```bash
-uvicorn app.main:app --reload
+curl -X GET http://localhost:8000/workflows
 ```
 
-The API will be available at `http://localhost:8000`.
+**Get Workflow by ID**
+```bash
+curl -X GET http://localhost:8000/workflows/{workflow_id}
+```
 
-### 5. API Documentation
-Once the server is running, visit the interactive Swagger UI at:
-- `http://localhost:8000/docs`
+**Update Workflow**
+```bash
+curl -X PUT http://localhost:8000/workflows/{workflow_id} \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Updated Onboarding Workflow"
+  }'
+```
+
+**Delete Workflow**
+```bash
+curl -X DELETE http://localhost:8000/workflows/{workflow_id}
+```
+
+
+### 2. Executions API
+
+**Trigger an Execution** (Simulates running the workflow)
+```bash
+curl -X POST http://localhost:8000/workflows/{workflow_id}/execute
+```
+
+**List Executions for a Workflow**
+```bash
+curl -X GET http://localhost:8000/workflows/{workflow_id}/executions
+```
+
+**Get a Specific Execution**
+```bash
+curl -X GET http://localhost:8000/workflows/{workflow_id}/executions/{execution_id}
+```
+
+
+### 3. Contacts API (CRM)
+
+**Create Contact**
+```bash
+curl -X POST http://localhost:8000/contacts \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Jane Doe",
+    "email": "jane@example.com",
+    "phone": "555-0199",
+    "tags": ["new_lead"]
+  }'
+```
+
+**List Contacts**
+```bash
+curl -X GET http://localhost:8000/contacts
+```
+
+**Get Contact by ID**
+```bash
+curl -X GET http://localhost:8000/contacts/{contact_id}
+```
+
+**Update Contact**
+```bash
+curl -X PUT http://localhost:8000/contacts/{contact_id} \
+  -H "Content-Type: application/json" \
+  -d '{
+    "phone": "555-9999"
+  }'
+```
+
+**Delete Contact**
+```bash
+curl -X DELETE http://localhost:8000/contacts/{contact_id}
+```
+
+**Add Tags to Contact** (Deduplicates automatically in MongoDB via `$addToSet`)
+```bash
+curl -X POST http://localhost:8000/contacts/{contact_id}/tags \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tags": ["vip", "engaged"]
+  }'
+```
+
+
+### 4. Opportunities API (CRM Pipelines)
+
+**Create Opportunity**
+```bash
+curl -X POST http://localhost:8000/opportunities \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Enterprise Deal",
+    "contact_id": "{contact_id}",
+    "stage": "new"
+  }'
+```
+
+**List Opportunities**
+```bash
+curl -X GET http://localhost:8000/opportunities
+```
+
+**Get Opportunity by ID**
+```bash
+curl -X GET http://localhost:8000/opportunities/{opportunity_id}
+```
+
+**Move Opportunity Stage**
+```bash
+curl -X PUT http://localhost:8000/opportunities/{opportunity_id}/move \
+  -H "Content-Type: application/json" \
+  -d '{
+    "stage": "qualified"
+  }'
+```

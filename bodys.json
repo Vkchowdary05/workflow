@@ -1,0 +1,135 @@
+{
+  "create_contact_1": {
+    "name": "John Smith",
+    "email": "john@example.com",
+    "phone": "1111111111",
+    "tags": ["lead"]
+  },
+  "create_contact_2": {
+    "name": "Alice Johnson",
+    "email": "alice@example.com",
+    "phone": "2222222222",
+    "tags": ["vip"]
+  },
+  "create_contact_3": {
+    "name": "Bob Lee",
+    "email": "bob@example.com",
+    "phone": "3333333333",
+    "tags": ["new"]
+  },
+
+  "create_workflow_welcome": {
+    "name": "Welcome Flow",
+    "description": "Send welcome email",
+    "trigger": {
+      "type": "contact_created",
+      "label": "Contact Created"
+    },
+    "steps": [
+      {
+        "id": "step_1",
+        "type": "action",
+        "action_type": "send_email",
+        "config": {
+          "to": "{{contact.email}}"
+        },
+        "on_success": "step_2"
+      },
+      {
+        "id": "step_2",
+        "type": "action",
+        "action_type": "add_tag",
+        "config": {
+          "tags": ["welcomed"]
+        }
+      }
+    ]
+  },
+
+  "create_workflow_followup": {
+    "name": "Followup Flow",
+    "description": "Delay then email",
+    "trigger": {
+      "type": "contact_created",
+      "label": "Contact Created"
+    },
+    "steps": [
+      {
+        "id": "step_1",
+        "type": "delay",
+        "config": {
+          "duration": 1,
+          "unit": "hours"
+        },
+        "on_complete": "step_2"
+      },
+      {
+        "id": "step_2",
+        "type": "action",
+        "action_type": "send_email",
+        "config": {
+          "to": "{{contact.email}}"
+        }
+      }
+    ]
+  },
+
+  "create_workflow_advanced": {
+    "name": "Advanced Flow",
+    "description": "Multi-step workflow",
+    "trigger": {
+      "type": "contact_created",
+      "label": "Contact Created"
+    },
+    "steps": [
+      {
+        "id": "step_1",
+        "type": "action",
+        "action_type": "send_email",
+        "config": {
+          "to": "{{contact.email}}"
+        },
+        "on_success": "step_2"
+      },
+      {
+        "id": "step_2",
+        "type": "delay",
+        "config": {
+          "duration": 2,
+          "unit": "days"
+        },
+        "on_complete": "step_3"
+      },
+      {
+        "id": "step_3",
+        "type": "action",
+        "action_type": "add_tag",
+        "config": {
+          "tags": ["engaged"]
+        }
+      }
+    ]
+  },
+
+  "create_opportunity_new": {
+    "name": "Startup Deal",
+    "contact_id": "{{contact_id}}",
+    "stage": "new"
+  },
+
+  "create_opportunity_qualified": {
+    "name": "Enterprise Deal",
+    "contact_id": "{{contact_id}}",
+    "stage": "qualified"
+  },
+
+  "create_opportunity_proposal": {
+    "name": "SMB Deal",
+    "contact_id": "{{contact_id}}",
+    "stage": "proposal"
+  },
+
+  "add_tags_to_contact": {
+    "tags": ["vip", "engaged"]
+  }
+}

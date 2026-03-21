@@ -4,7 +4,24 @@ from fastapi import APIRouter
 from app.models.opportunity import OpportunityCreate, MoveStage
 from app.services import opportunity_service
 
+from fastapi import APIRouter, HTTPException
+from app.core.database import get_database
+from bson import ObjectId
+
 router = APIRouter()
+
+@router.delete("/{opportunity_id}")
+async def delete_opportunity(opportunity_id: str):
+    db = get_database()
+
+    result = await db.opportunities.delete_one({
+        "_id": ObjectId(opportunity_id)
+    })
+
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+
+    return {"message": "Opportunity deleted successfully"}
 
 
 @router.post("", status_code=201)
