@@ -310,6 +310,10 @@ body {
   color: #94a3b8;
   cursor: default;
   transition: all 0.15s ease;
+  min-height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .execute-hint { font-weight: 500; }
 

@@ -21,6 +21,7 @@ const BuilderPage = () => {
   const [workflowName, setWorkflowName]  = useState('Untitled Workflow');
   const [isActive, setIsActive]          = useState(false);
   const [isLocked, setIsLocked]          = useState(false);
+
   const [toasts, setToasts]              = useState([]);
   const [saving, setSaving]              = useState(false);
   const [refreshLogs, setRefreshLogs]    = useState(0);
@@ -198,6 +199,8 @@ const BuilderPage = () => {
           </button>
         </div>
       </div>
+
+
 
       {/* ── MAIN LAYOUT ──────────────────────────────────────────────── */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>

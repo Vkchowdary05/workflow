@@ -4,7 +4,7 @@ import { Handle, Position } from 'reactflow';
 // ── Drag handler — identical for all node types ─────────────────────
 function makeOnDragStart(data) {
   return (e) => {
-    e.stopPropagation();
+    // DO NOT call e.stopPropagation() — it breaks the HTML5 drag session
     e.dataTransfer.effectAllowed = 'copy';
     e.dataTransfer.setData('application/quantixone-node', JSON.stringify({
         nodeKind:   data.nodeKind,

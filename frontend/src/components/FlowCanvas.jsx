@@ -14,6 +14,8 @@ const FlowCanvas = ({ nodes, edges, onNodesChange, onEdgesChange, onConnect, isL
         nodes={nodes}
         edges={edges}
         nodesDraggable={!isLocked}
+        panOnDrag={!isLocked}
+        selectionOnDrag={false}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
@@ -37,20 +39,7 @@ const FlowCanvas = ({ nodes, edges, onNodesChange, onEdgesChange, onConnect, isL
           maskColor="rgba(248, 250, 252, 0.7)"
         />
       </ReactFlow>
-      <div style={{ position: 'absolute', bottom: 80, left: 10, zIndex: 10 }}>
-        <button
-          onClick={() => setIsLocked(l => !l)}
-          title={isLocked ? 'Unlock canvas (drag within canvas)' : 'Lock canvas (drag to panels)'}
-          style={{
-            width: 26, height: 26, border: '1px solid #e2e8f0',
-            borderRadius: 4, background: isLocked ? '#4f46e5' : '#fff',
-            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 14,
-          }}
-        >
-          {isLocked ? '🔓' : '🔒'}
-        </button>
-      </div>
+
     </div>
   );
 };

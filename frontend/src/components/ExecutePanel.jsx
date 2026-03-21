@@ -41,7 +41,7 @@ const ExecutePanel = ({ workflowId, onExecuted, showToast }) => {
   };
 
   return (
-    <CollapsiblePanel title="Execute Workflow" icon="⚡" defaultOpen={false}>
+    <CollapsiblePanel title="Execute Workflow" icon="⚡" defaultOpen={true}>
       <div
         className={`execute-drop-zone ${isDragOver ? 'drop-active-execute' : ''}`}
         onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
@@ -52,8 +52,10 @@ const ExecutePanel = ({ workflowId, onExecuted, showToast }) => {
           {running
             ? '⏳ Running workflow…'
             : isDragOver
-              ? '↓ Release to execute'
-              : 'Drop any node here to run the full workflow'}
+              ? '↓ Release to execute the workflow'
+              : workflowId
+                ? 'Drop any node here to run the full workflow'
+                : '⚠ Save the workflow first, then drag a node here'}
         </div>
       </div>
       {last && (
