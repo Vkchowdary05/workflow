@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <!-- Outer Black Square -->
+  <rect width="120" height="120" rx="12" fill="#000000" />
+  
+  <!-- Inner White Circle -->
+  <circle cx="60" cy="60" r="50" fill="#FFFFFF" />
+  
+  <!-- Custom VK Path -->
+  <path d="M 33 45 
+           C 33 45, 42 63, 49 71 
+           C 51 73, 54 74, 55 74
+           L 55 45
+           L 68 45
+           L 68 56
+           C 68 59, 69 60, 72 58
+           L 84 45
+           L 98 45
+           L 81 61
+           L 99 81
+           L 85 81
+           L 73 67
+           C 71 65, 68 65, 68 68
+           L 68 81
+           L 55 81
+           C 39 81, 26 53, 22 45 
+           Z" 
+        fill="#000000" />
+</svg>
