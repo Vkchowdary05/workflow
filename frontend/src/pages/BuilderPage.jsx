@@ -7,7 +7,7 @@ import ContactsPanel from '../components/ContactsPanel';
 import OpportunitiesPanel from '../components/OpportunitiesPanel';
 import ExecutePanel from '../components/ExecutePanel';
 import ToastContainer from '../components/Toast';
-import { parseWorkflowToReactFlow, prepareForSave } from '../utils/parser';
+import { parseWorkflowToReactFlow, prepareForSave, extractWorkflow } from '../utils/parser';
 import { workflowAPI } from '../services/api';
 
 const BuilderPage = () => {
@@ -36,18 +36,43 @@ const BuilderPage = () => {
 
   // On mount: import workflow and set up canvas
   useEffect(() => {
-    if (!extracted) return;
+    if (!extracted) {
+      // Page was refreshed — try to restore
+      const savedId = sessionStorage.getItem('currentWorkflowId');
+      if (savedId) {
+        setWorkflowId(savedId);
+        // Fetch the workflow from DB and restore the canvas
+        workflowAPI.getById(savedId).then(res => {
+          if (!res.data) return;
+          const ext = extractWorkflow(res.data);
+          const { nodes: n, edges: e } = parseWorkflowToReactFlow(ext);
+          setNodes(n);
+          setEdges(e);
+          setWorkflowName(ext.name || 'Untitled Workflow');
+          setIsActive(ext.settings?.status === 'active');
+        }).catch(err => console.error('Failed to restore workflow', err));
+      }
+      return;
+    }
 
     const init = async () => {
-      // Import workflow to backend
-      try {
-        const res = await workflowAPI.import(rawJson);
-        setWorkflowId(res.data.workflow_id);
-      } catch (err) {
-        console.error('Import failed, trying as update', err);
-        // If it's already imported (e.g., loaded from DB), use existing ID
-        const id = rawJson?.workflow_id || rawJson?.id || rawJson?._id;
-        if (id) setWorkflowId(id);
+      // Check if we already have an ID for this workflow
+      const existingId = rawJson?.workflow_id || rawJson?.id || rawJson?._id;
+
+      if (existingId) {
+        // Workflow came from DB — use its existing ID, don't re-import
+        setWorkflowId(existingId);
+        sessionStorage.setItem('currentWorkflowId', existingId);
+      } else {
+        // Fresh upload — import once
+        try {
+          const res = await workflowAPI.import(rawJson);
+          const newId = res.data.workflow_id;
+          setWorkflowId(newId);
+          sessionStorage.setItem('currentWorkflowId', newId);
+        } catch (err) {
+          console.error('Import failed', err);
+        }
       }
 
       // Parse to ReactFlow

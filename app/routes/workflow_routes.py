@@ -40,6 +40,17 @@ async def import_workflow(payload: dict):
             "settings": payload.get("settings", {}),
             "status": "inactive",
         }
+
+    # If an existing workflow_id is provided, update instead of create
+    existing_id = payload.get("workflow_id") or payload.get("id") or payload.get("_id")
+    if existing_id:
+        existing_id = str(existing_id)
+        existing_workflow = await workflow_repo.get_by_id(existing_id)
+        if existing_workflow:
+            updated = await workflow_service.update_workflow(existing_id, data)
+            if updated:
+                return {**updated, "imported": True}
+
     result = await workflow_service.create_workflow(data)
     return {**result, "imported": True}
 
