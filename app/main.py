@@ -40,8 +40,8 @@ app.add_middleware(
 
 
 @app.get("/")
-async def root():
-    return {"message": "API is running"}
+def health():
+    return {"status": "ok"}
 
 
 # ── Routers ──
