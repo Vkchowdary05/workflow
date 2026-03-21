@@ -1,10 +1,26 @@
 """Routes for Contact CRUD endpoints."""
 
 from fastapi import APIRouter
+from pydantic import BaseModel as PBM
+from typing import List
 from app.models.contact import ContactCreate, ContactUpdate, TagsAdd
 from app.services import contact_service
 
 router = APIRouter()
+
+
+class BulkCreate(PBM):
+    contacts: List[ContactCreate]
+
+
+@router.post("/bulk", status_code=201)
+async def bulk_create(payload: BulkCreate):
+    """Create multiple contacts at once."""
+    created = 0
+    for c in payload.contacts:
+        await contact_service.create_contact(c.model_dump())
+        created += 1
+    return {"created": created}
 
 
 @router.post("", status_code=201)
@@ -43,3 +59,4 @@ async def delete_contact(contact_id: str):
 async def add_tags(contact_id: str, payload: TagsAdd):
     """Add tags to a contact."""
     return await contact_service.add_tags_to_contact(contact_id, payload.tags)
+

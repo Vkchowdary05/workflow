@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { workflowAPI } from '../services/api';
-import { ScrollText, RefreshCw, CheckCircle2, XCircle, Clock } from 'lucide-react';
+import CollapsiblePanel from './CollapsiblePanel';
 
 const ExecutionLogs = ({ currentWorkflowId }) => {
   const [executions, setExecutions] = useState([]);
@@ -13,7 +13,6 @@ const ExecutionLogs = ({ currentWorkflowId }) => {
     setLoading(true);
     try {
       const res = await workflowAPI.listExecutions(currentWorkflowId);
-      // Sort to show newest first
       setExecutions((res.data || []).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
     } catch (err) {
       console.error("Error fetching executions");
@@ -39,98 +38,107 @@ const ExecutionLogs = ({ currentWorkflowId }) => {
     }
   };
 
-  const getStatusIcon = (status) => {
-    if (status === 'completed' || status === 'success') return <CheckCircle2 size={16} color="var(--success)" />;
-    if (status === 'failed') return <XCircle size={16} color="var(--danger)" />;
-    return <Clock size={16} color="var(--warning)" />;
-  };
-
   if (!currentWorkflowId) {
     return (
-      <div className="panel executions-panel flex-center w-full" style={{ height: '300px' }}>
-        <div className="text-secondary text-center" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-          <ScrollText size={32} style={{ opacity: 0.5 }} />
-          <p>Save or load a workflow to view execution logs.</p>
+      <CollapsiblePanel title="Execution Logs" icon="📋" defaultOpen>
+        <div style={{ textAlign: 'center', padding: '24px 0', color: '#94a3b8', fontSize: 13 }}>
+          Save or load a workflow to view execution logs.
         </div>
-      </div>
+      </CollapsiblePanel>
     );
   }
 
   return (
-    <div className="panel executions-panel w-full" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '300px' }}>
-      <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-        <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
-          <ScrollText size={18} /> Execution Logs
-        </h2>
-        <button onClick={fetchExecutions} className="action-btn icon-only secondary" title="Refresh">
-          <RefreshCw size={16} className={loading ? 'spin' : ''} />
-        </button>
-      </div>
-
-      <div style={{ display: 'flex', gap: '16px', marginTop: '8px', flex: 1, minHeight: 0 }}>
+    <CollapsiblePanel title="Execution Logs" icon="📋" defaultOpen>
+      <div style={{ display: 'flex', gap: 12, minHeight: 0 }}>
         {/* Left: List of executions */}
-        <div className="list-container" style={{ flex: 1, borderRight: '1px solid var(--border)', paddingRight: '12px', overflowY: 'auto' }}>
-          {executions.length === 0 ? (
-            <p className="text-secondary text-sm">No executions found.</p>
-          ) : (
-            executions.map(ex => (
-              <div 
-                key={ex.id || ex._id} 
-                className={`list-item clickable ${selectedExec === (ex.id || ex._id) ? 'active' : ''}`}
-                onClick={() => loadDetails(ex.id || ex._id)}
-                style={{ padding: '8px', marginBottom: '8px', borderRadius: '4px' }}
+        <div style={{ flex: 1, borderRight: '1px solid #f1f5f9', paddingRight: 10, maxHeight: 250, overflowY: 'auto' }}>
+          {loading && <div style={{ fontSize: 12, color: '#94a3b8' }}>Loading...</div>}
+          {!loading && executions.length === 0 && (
+            <div style={{ fontSize: 12, color: '#94a3b8' }}>No executions found.</div>
+          )}
+          {executions.map(ex => {
+            const id = ex.id || ex._id || ex.execution_id;
+            return (
+              <div
+                key={id}
+                onClick={() => loadDetails(id)}
+                style={{
+                  padding: '6px 8px',
+                  marginBottom: 4,
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  background: selectedExec === id ? 'rgba(99,102,241,0.08)' : 'transparent',
+                  border: selectedExec === id ? '1px solid #a5b4fc' : '1px solid transparent',
+                  transition: 'all 0.15s',
+                }}
               >
-                <div className="flex-between">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    {getStatusIcon(ex.status)}
-                    <span style={{ fontSize: '0.85rem', fontWeight: 500 }}>
-                      {new Date(ex.created_at || Date.now()).toLocaleTimeString()}
-                    </span>
-                  </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 12 }}>
+                    {ex.status === 'success' || ex.status === 'completed' ? '✅' : ex.status === 'failed' ? '❌' : '⏳'}
+                  </span>
+                  <span style={{ fontSize: 12, fontWeight: 500 }}>
+                    {new Date(ex.created_at || Date.now()).toLocaleTimeString()}
+                  </span>
                 </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px', paddingLeft: '22px' }}>
-                  ID: {String(ex.id || ex._id).substring(String(ex.id || ex._id).length - 6)}
+                <div style={{ fontSize: 10, color: '#94a3b8', paddingLeft: 20 }}>
+                  ID: {String(id).slice(-6)}
                 </div>
               </div>
-            ))
-          )}
+            );
+          })}
+          <button
+            onClick={fetchExecutions}
+            style={{
+              marginTop: 6, width: '100%', padding: '4px 0', fontSize: 11,
+              background: '#f1f5f9', border: '1px solid #e2e8f0',
+              borderRadius: 5, cursor: 'pointer', color: '#475569',
+            }}
+          >
+            ↻ Refresh
+          </button>
         </div>
 
-        {/* Right: Details */}
-        <div className="details-container" style={{ flex: 1.5, overflowY: 'auto', paddingLeft: '4px' }}>
+        {/* Right: Details — uses step_logs (NOT trace) */}
+        <div style={{ flex: 1.5, maxHeight: 250, overflowY: 'auto' }}>
           {!selectedExec ? (
-            <p className="text-secondary text-sm flex-center h-full">Select a run.</p>
+            <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', paddingTop: 30 }}>
+              Select a run.
+            </div>
           ) : !details ? (
-            <p className="text-secondary text-sm flex-center h-full">Loading details...</p>
+            <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', paddingTop: 30 }}>
+              Loading details...
+            </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div className="flex-between">
-                <strong style={{ fontSize: '0.9rem' }}>Status:</strong>
-                <span className={`tag ${details.status || 'pending'}`}>{details.status || 'Pending'}</span>
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                <span style={{ fontSize: 12, fontWeight: 600 }}>Status:</span>
+                <span className={`tag ${details.status || 'pending'}`} style={{ fontSize: 10 }}>
+                  {details.status || 'Pending'}
+                </span>
               </div>
-              
-              <div>
-                <strong style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem' }}>Execution Trace:</strong>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {(details.trace || []).map((t, idx) => (
-                    <div key={idx} style={{ background: 'var(--bg-hover)', padding: '10px', borderRadius: '6px' }}>
-                      <div className="flex-between">
-                        <span style={{ fontWeight: 600, color: 'var(--primary)', fontSize: '0.85rem' }}>{t.step_id}</span>
-                        {getStatusIcon(t.status)}
-                      </div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                        {t.timestamp ? new Date(t.timestamp).toLocaleTimeString() : 'Unknown time'}
-                      </div>
-                    </div>
-                  ))}
-                  {(!details.trace || details.trace.length === 0) && <p className="text-secondary text-xs">No trace events yet.</p>}
+
+              {/* ── Step logs timeline (BUG FIX: was details.trace, now details.step_logs) ── */}
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Step Logs:</div>
+              {(details.step_logs ?? []).map((log, i) => (
+                <div key={i} className="log-row">
+                  <div className={`log-dot log-${log.status}`} />
+                  <div className="log-body">
+                    <div className="log-label">{log.label ?? log.step_id}</div>
+                    <div className="log-message">{log.message}</div>
+                  </div>
+                  <span className={`log-badge log-badge-${log.status}`}>{log.status}</span>
+                  <span className="log-time">{new Date(log.timestamp).toLocaleTimeString()}</span>
                 </div>
-              </div>
+              ))}
+              {(!details.step_logs || details.step_logs.length === 0) && (
+                <div style={{ fontSize: 11, color: '#94a3b8' }}>No step logs recorded.</div>
+              )}
             </div>
           )}
         </div>
       </div>
-    </div>
+    </CollapsiblePanel>
   );
 };
 

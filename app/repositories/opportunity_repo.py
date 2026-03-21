@@ -50,3 +50,15 @@ async def move_stage(opportunity_id: str, new_stage: str) -> dict | None:
         return_document=True,
     )
     return result
+
+
+async def update(opportunity_id: str, update_data: dict) -> dict | None:
+    """Update arbitrary fields on an opportunity document."""
+    if not ObjectId.is_valid(opportunity_id):
+        return None
+    update_data["updated_at"] = datetime.now(timezone.utc)
+    return await _collection().find_one_and_update(
+        {"_id": ObjectId(opportunity_id)},
+        {"$set": update_data},
+        return_document=True,
+    )

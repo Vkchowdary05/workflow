@@ -7,6 +7,8 @@ from app.routes.workflow_routes import router as workflow_router
 from app.routes.execution_routes import router as execution_router
 from app.routes.contact_routes import router as contact_router
 from app.routes.opportunity_routes import router as opportunity_router
+from app.routes.message_routes import router as message_router
+from app.routes.registry_routes import router as registry_router
 
 
 # ✅ DEFINE FIRST
@@ -30,7 +32,7 @@ app = FastAPI(
 # ✅ CORS (correct position)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:5173", "https://*.vercel.app", "*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -47,6 +49,8 @@ app.include_router(workflow_router, prefix="/workflows", tags=["Workflows"])
 app.include_router(execution_router, prefix="/workflows", tags=["Executions"])
 app.include_router(contact_router, prefix="/contacts", tags=["Contacts"])
 app.include_router(opportunity_router, prefix="/opportunities", tags=["Opportunities"])
+app.include_router(message_router, prefix="/messages", tags=["Messages"])
+app.include_router(registry_router, prefix="/registries", tags=["Registries"])
 
 
 @app.get("/health", tags=["Health"])
