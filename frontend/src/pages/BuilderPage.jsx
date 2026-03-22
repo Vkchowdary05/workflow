@@ -27,6 +27,8 @@ export default function BuilderPage() {
   const [refreshLogs, setRefreshLogs]    = useState(0);
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [addModal, setAddModal] = useState(null);
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [isDragOverCanvas, setIsDragOverCanvas] = useState(false);
 
   const selectedNode = nodes.find(n => n.id === selectedNodeId) || null;
 
@@ -81,32 +83,81 @@ export default function BuilderPage() {
     init();
   }, []); // eslint-disable-line
 
-  /* ── Event listeners ── */
-  useEffect(() => {
-    const handleAddOnEdge = (e) => {
-      const { edgeId, sourceNodeId, targetNodeId, insertPosition } = e.detail;
-      const sourceNode = nodes.find(n => n.data?.stepId === sourceNodeId || n.id === sourceNodeId);
-      setAddModal({
-        sourceNodeId,
-        targetNodeId,
-        edgeId,
-        insertPosition: insertPosition || sourceNode?.position || { x: 300, y: 300 },
+  /* ── Event listeners & Guards ── */
+  const handleRemove = useCallback((e) => {
+    const { nodeId } = e.detail;
+
+    // ── Guard: block deletion of trigger node ──
+    if (nodeId === 'trigger') {
+      showToast('The trigger node cannot be deleted', 'warning');
+      return;
+    }
+
+    // ── Guard: block deletion of the first step (direct child of trigger) ──
+    const isFirstStep = edges.some(ed => ed.source === 'trigger' && ed.target === nodeId);
+    if (isFirstStep) {
+      showToast('The first step cannot be deleted — it is directly connected to the trigger', 'warning');
+      return;
+    }
+
+    // ── Find incoming and outgoing edges for the deleted node ──
+    const incomingEdges = edges.filter(ed => ed.target === nodeId);
+    const outgoingEdges = edges.filter(ed => ed.source === nodeId);
+
+    // ── Build reconnection edges ──
+    const reconnectionEdges = [];
+    incomingEdges.forEach(inEdge => {
+      outgoingEdges.forEach(outEdge => {
+        const reconnectEdge = {
+          id:           `e-${inEdge.source}-${outEdge.target}-reconnect-${Date.now()}`,
+          source:       inEdge.source,
+          target:       outEdge.target,
+          sourceHandle: inEdge.sourceHandle || 'success',
+          type:         'customEdge',
+          style:        { stroke: '#c5cdd6', strokeWidth: 1.5, strokeDasharray: '6 4' },
+          data:         { source: inEdge.source, target: outEdge.target },
+        };
+        reconnectionEdges.push(reconnectEdge);
       });
-    };
-    const handleRemove = (e) => {
-      const { nodeId } = e.detail;
-      setNodes(nds => nds.filter(n => n.id !== nodeId && n.data.stepId !== nodeId));
-      setEdges(eds => eds.filter(ed => ed.source !== nodeId && ed.target !== nodeId));
-      if (selectedNodeId === nodeId) setSelectedNodeId(null);
+    });
+
+    // ── Remove the node and its edges, add reconnection edges ──
+    setNodes(nds => nds.filter(n => n.id !== nodeId && n.data?.stepId !== nodeId));
+    setEdges(eds => {
+      const withoutDeleted = eds.filter(
+        ed => ed.source !== nodeId && ed.target !== nodeId
+      );
+      return [...withoutDeleted, ...reconnectionEdges];
+    });
+
+    if (selectedNodeId === nodeId) setSelectedNodeId(null);
+
+    if (reconnectionEdges.length > 0) {
+      showToast(`Node removed — upstream and downstream nodes reconnected`, 'info');
+    } else {
       showToast('Node removed', 'info');
-    };
+    }
+  }, [edges, selectedNodeId, setNodes, setEdges, showToast]);
+
+  const handleAddOnEdge = useCallback((e) => {
+    const { edgeId, sourceNodeId, targetNodeId, insertPosition } = e.detail;
+    const sourceNode = nodes.find(n => n.data?.stepId === sourceNodeId || n.id === sourceNodeId);
+    setAddModal({
+      sourceNodeId,
+      targetNodeId,
+      edgeId,
+      insertPosition: insertPosition || sourceNode?.position || { x: 300, y: 300 },
+    });
+  }, [nodes]);
+
+  useEffect(() => {
     window.addEventListener('add-node-on-edge', handleAddOnEdge);
     window.addEventListener('remove-node', handleRemove);
     return () => {
       window.removeEventListener('add-node-on-edge', handleAddOnEdge);
       window.removeEventListener('remove-node', handleRemove);
     };
-  }, [nodes, selectedNodeId, setNodes, setEdges, showToast]);
+  }, [handleAddOnEdge, handleRemove]);
 
   /* ── Handlers ── */
   const handleSave = async () => {
@@ -210,6 +261,7 @@ export default function BuilderPage() {
   }, [setNodes, setEdges]);
 
   const handleExecute = async () => {
+    setIsExecuting(true);
     try {
       const payload = prepareForSave(nodes, edges, workflowName);
       let currentId = workflowId;
@@ -227,6 +279,7 @@ export default function BuilderPage() {
       
       if (!currentId) {
         showToast('Save first before executing', 'error');
+        setIsExecuting(false);
         return;
       }
       
@@ -254,8 +307,13 @@ export default function BuilderPage() {
       window.dispatchEvent(new CustomEvent('workflow-executed', {
         detail: { executionId: exec.execution_id, status: exec.status, entityType, entity: exec.created_entity }
       }));
+      
+      setTimeout(() => setIsExecuting(false), 
+        (exec?.step_logs?.length || 1) * 700 + 1500
+      );
     } catch (err) {
       showToast(`Execution failed: ${err.response?.data?.detail ?? err.message}`, 'error');
+      setIsExecuting(false);
     }
   };
 
@@ -282,34 +340,94 @@ export default function BuilderPage() {
     event.preventDefault();
     const raw = event.dataTransfer.getData('application/quantixone-palette');
     if (!raw) return;
-    const flowBounds = canvasRef.current?.getBoundingClientRect();
-    if (!flowBounds) return;
+
     try {
       const payload = JSON.parse(raw);
-      let position = {
-        x: event.clientX - flowBounds.left,
-        y: event.clientY - flowBounds.top,
+
+      // Get the ReactFlow viewport element for accurate bounds
+      const reactFlowBounds = canvasRef.current?.getBoundingClientRect();
+      if (!reactFlowBounds) return;
+
+      // Calculate position relative to ReactFlow canvas
+      const clientPosition = {
+        x: event.clientX - reactFlowBounds.left,
+        y: event.clientY - reactFlowBounds.top,
       };
+
+      // Project from screen coordinates to flow coordinates (accounts for pan/zoom)
+      let flowPosition = clientPosition;
       if (rfInstance.current?.project) {
-        position = rfInstance.current.project(position);
+        flowPosition = rfInstance.current.project(clientPosition);
       }
+
       const newId = `step_${Date.now()}`;
-      const typeMap = { trigger: 'triggerNode', action: 'actionNode', condition: 'conditionNode', delay: 'delayNode' };
-      const newNode = {
-        id: newId,
-        type: typeMap[payload.nodeKind] || 'actionNode',
-        position,
-        data: { ...payload, stepId: newId, config: { ...(payload.defaultConfig || {}) } },
+      const typeMap = {
+        trigger:   'triggerNode',
+        action:    'actionNode',
+        condition: 'conditionNode',
+        delay:     'delayNode',
       };
+
+      const newNode = {
+        id:       newId,
+        type:     typeMap[payload.nodeKind] || 'actionNode',
+        position: flowPosition,
+        data: {
+          ...payload,
+          stepId: newId,
+          label:  payload.label,
+          config: { ...(payload.defaultConfig || {}) },
+        },
+      };
+
       setNodes(nds => nds.concat(newNode));
+
+      // ── Auto-connect: find the last node in the chain and connect to new node ──
+      setEdges(eds => {
+        // Find nodes that have no outgoing 'success' edge — these are "tail" nodes
+        const nodesWithOutgoingSuccess = new Set(
+          eds
+            .filter(e => e.sourceHandle === 'success' || !e.sourceHandle)
+            .map(e => e.source)
+        );
+
+        // Find tail nodes (nodes with no outgoing edge that the new node can connect from)
+        const tailNodes = nodes.filter(n => !nodesWithOutgoingSuccess.has(n.id));
+
+        // If there is exactly one tail node, auto-connect it to the new node
+        if (tailNodes.length === 1) {
+          const tailNode = tailNodes[0];
+          // Don't auto-connect if the tail node is a condition (it has two branches)
+          if (tailNode.data?.nodeKind !== 'condition') {
+            const autoEdge = {
+              id:           `e-${tailNode.id}-${newId}-auto`,
+              source:       tailNode.id,
+              target:       newId,
+              sourceHandle: tailNode.data?.nodeKind === 'delay' ? 'complete' : 'success',
+              type:         'customEdge',
+              style:        { stroke: '#c5cdd6', strokeWidth: 1.5, strokeDasharray: '6 4' },
+              data:         { source: tailNode.id, target: newId },
+            };
+            return [...eds, autoEdge];
+          }
+        }
+
+        return eds;
+      });
+
       showToast(`Added: ${payload.label}`, 'success');
       setSelectedNodeId(newId);
     } catch (err) {
       console.error('Drop parse error:', err);
+      showToast('Failed to add node', 'error');
     }
-  }, [setNodes, showToast, rfInstance]);
+  }, [nodes, setNodes, setEdges, showToast, rfInstance]);
 
-  const onDragOver = useCallback(e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }, []);
+  const onDragOver = useCallback(e => { 
+    e.preventDefault(); 
+    e.dataTransfer.dropEffect = 'copy'; 
+    setIsDragOverCanvas(true); 
+  }, []);
 
   /* ── AddNodeModal handler ── */
   const handleAddFromModal = (newNode, newEdge) => {
@@ -376,7 +494,40 @@ export default function BuilderPage() {
       <div className="builder-layout">
         <LeftSidebar key={refreshLogs} showToast={showToast} workflowId={workflowId} />
 
-        <div className="canvas-area" ref={canvasRef} onDrop={onDrop} onDragOver={onDragOver}>
+        <div 
+          className={`canvas-area ${isDragOverCanvas ? 'canvas-drag-over' : ''}`}
+          ref={canvasRef}
+          onDrop={(e) => { setIsDragOverCanvas(false); onDrop(e); }}
+          onDragOver={onDragOver}
+          onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setIsDragOverCanvas(false); }}
+        >
+          {isExecuting && (
+            <div style={{
+              position: 'absolute',
+              top: 16,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              background: 'rgba(27, 106, 201, 0.9)',
+              color: '#fff',
+              padding: '6px 18px',
+              borderRadius: 20,
+              fontSize: 12,
+              fontWeight: 600,
+              zIndex: 20,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              boxShadow: '0 2px 12px rgba(27,106,201,0.4)',
+              animation: 'executingPulse 1.2s ease-in-out infinite',
+            }}>
+              <span style={{ 
+                width: 8, height: 8, borderRadius: '50%', 
+                background: '#fff', display: 'inline-block',
+                animation: 'executingPulse 1.2s ease-in-out infinite'
+              }} />
+              Executing workflow...
+            </div>
+          )}
           <FlowCanvas
             nodes={nodes}
             edges={edges}

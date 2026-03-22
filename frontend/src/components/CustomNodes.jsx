@@ -36,8 +36,16 @@ function getSubtitle(data) {
 }
 
 export function TriggerNode({ data, selected }) {
+  const execClass = data.isAnimating
+    ? 'exec-running'
+    : data.executionStatus === 'success'
+      ? 'exec-success'
+      : data.executionStatus === 'failed'
+        ? 'exec-failed'
+        : '';
+
   return (
-    <div className={`wf-node wf-node-trigger ${selected ? 'selected' : ''}`}>
+    <div className={`wf-node wf-node-trigger ${execClass} ${selected ? 'selected' : ''}`}>
       <Handle type="source" position={Position.Bottom} />
       <div className="wf-node-header">
         <div className="wf-node-dot" style={{ background: '#6c63ff' }} />

@@ -51,6 +51,24 @@ function PaletteCard({ item }) {
       defaultConfig: item.defaultConfig,
       triggerType:   item.triggerType || null,
     }));
+
+    // Create a ghost drag image matching the palette card style
+    const ghost = document.createElement('div');
+    ghost.textContent = item.label;
+    ghost.style.cssText = `
+      position: fixed; top: -1000px; left: -1000px;
+      background: white; border: 1px solid ${item.color};
+      border-left: 3px solid ${item.color};
+      padding: 6px 12px; border-radius: 6px;
+      font-size: 12px; font-weight: 500;
+      font-family: Inter, sans-serif;
+      color: #1a1a2e;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      pointer-events: none;
+    `;
+    document.body.appendChild(ghost);
+    e.dataTransfer.setDragImage(ghost, 60, 20);
+    setTimeout(() => document.body.removeChild(ghost), 0);
   };
   return (
     <div

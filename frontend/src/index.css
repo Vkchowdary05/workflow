@@ -392,3 +392,31 @@ body {
 .wf-node-delay.selected {
   box-shadow: 0 0 0 2px rgba(142, 68, 173, 0.25) !important;
 }
+
+/* Canvas drag-over highlight */
+.canvas-area.canvas-drag-over {
+  background: #eef3ff;
+  outline: 2px dashed var(--accent-blue);
+  outline-offset: -4px;
+}
+
+.canvas-area.canvas-drag-over::after {
+  content: 'Drop to add node';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(27, 106, 201, 0.85);
+  color: white;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  pointer-events: none;
+  z-index: 5;
+}
+
+@keyframes executingPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
