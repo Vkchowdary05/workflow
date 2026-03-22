@@ -88,6 +88,8 @@ function PaletteCard({ item }) {
 export default function LeftSidebar({ showToast, workflowId }) {
   const [search, setSearch]       = useState('');
   const [activeTab, setActiveTab] = useState('contacts');
+  const [sidebarWidth, setSidebarWidth] = useState(250);
+  const [isResizing, setIsResizing] = useState(false);
 
   useEffect(() => {
     const handleExecuted = (e) => {
@@ -100,13 +102,35 @@ export default function LeftSidebar({ showToast, workflowId }) {
     return () => window.removeEventListener('workflow-executed', handleExecuted);
   }, []);
 
+  useEffect(() => {
+    if (!isResizing) return;
+    const handleMouseMove = (e) => {
+      let newWidth = e.clientX - 56;
+      if (newWidth < 220) newWidth = 220;
+      if (newWidth > 500) newWidth = 500;
+      setSidebarWidth(newWidth);
+    };
+    const handleMouseUp = () => setIsResizing(false);
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
+
   const filtered = PALETTE_SECTIONS.map(s => ({
     ...s,
     items: s.items.filter(i => i.label.toLowerCase().includes(search.toLowerCase())),
   })).filter(s => s.items.length > 0);
 
   return (
-    <div className="left-sidebar">
+    <div className="left-sidebar" style={{ width: sidebarWidth, position: 'relative' }}>
+      <div 
+        className={`sidebar-resizer ${isResizing ? 'resizing' : ''}`}
+        onMouseDown={() => setIsResizing(true)}
+      />
       {/* Search */}
       <div className="sidebar-search">
         <div className="sidebar-search-wrapper">

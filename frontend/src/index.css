@@ -420,3 +420,183 @@ body {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
 }
+
+/* ── Contact Cards (CRM) ── */
+.contact-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+.contact-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+.contact-card.drop-active-contact {
+  border: 2px dashed var(--accent-blue);
+  background: #f4f8ff;
+}
+.contact-card.highlight-new {
+  animation: highlightGlow 3s ease-out;
+}
+@keyframes highlightGlow {
+  0% { box-shadow: 0 0 0 2px var(--accent-green); background: #f0fdf4; }
+  100% { box-shadow: 0 0 0 0px rgba(39, 174, 96, 0); background: var(--bg-card); }
+}
+.contact-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.3);
+}
+.contact-name { font-weight: 600; font-size: 14px; color: var(--text-primary); margin-bottom: 2px; }
+.contact-info-row { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-secondary); margin-bottom: 3px; }
+.contact-info-icon { opacity: 0.7; font-size: 10px; }
+/* ── Contact Suggestions Area ── */
+.contact-suggestions {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.contact-suggestions-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+.contact-actions {
+  display: flex;
+  gap: 6px;
+}
+.contact-action-btn {
+  background: var(--bg-hover);
+  border: none;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s;
+}
+.contact-action-btn:hover {
+  background: #e2e8f0;
+  color: var(--text-primary);
+}
+.contact-action-btn.danger:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+/* ── Sidebar Resizer ── */
+.sidebar-resizer {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 100;
+  background: transparent;
+  transition: background 0.15s;
+}
+.sidebar-resizer:hover, .sidebar-resizer.resizing {
+  background: var(--accent-blue);
+}
+
+/* ── Fancy Action Cards (Upload Page) ── */
+.action-cards-grid {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 32px;
+  flex-wrap: wrap;
+  justify-content: center;
+  width: 100%;
+  max-width: 640px;
+}
+.fancy-action-card {
+  flex: 1;
+  min-width: 240px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
+}
+.fancy-action-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--accent-blue);
+}
+.fancy-icon-container {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: #f0f6ff;
+  color: var(--accent-blue);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+.fancy-action-card:hover .fancy-icon-container {
+  background: var(--accent-blue);
+  color: #fff;
+}
+.fancy-details {
+  flex: 1;
+  text-align: left;
+}
+.fancy-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.fancy-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.fancy-arrow {
+  color: var(--text-muted);
+  font-size: 18px;
+  font-weight: 700;
+  opacity: 0;
+  transform: translateX(-10px);
+  transition: all 0.2s ease;
+}
+.fancy-action-card:hover .fancy-arrow {
+  opacity: 1;
+  transform: translateX(0);
+  color: var(--accent-blue);
+}

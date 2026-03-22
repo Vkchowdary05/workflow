@@ -200,25 +200,37 @@ const ContactsPanel = ({ showToast, compact }) => {
               onDragLeave={() => setCardOver(null)}
               onDrop={(e) => handleCardDrop(e, contact)}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div className="contact-avatar">
                   {contact.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
                 </div>
-                <div style={{ flex: 1 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="contact-name">{contact.name}</div>
-                  <div className="contact-email">{contact.email}</div>
-                  {contact.phone && <div className="contact-phone">{contact.phone}</div>}
-                </div>
-                <div style={{ display: 'flex', gap: 4 }}>
-                  <button onClick={() => handleAddTag(cid)} style={smallBtnStyle}>+🏷</button>
-                  <button onClick={() => handleDelete(cid)} style={{ ...smallBtnStyle, color: '#dc2626' }}>🗑</button>
+                  <div className="contact-info-row">
+                    <span className="contact-info-icon">✉️</span> <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{contact.email}</span>
+                  </div>
+                  {contact.phone && (
+                    <div className="contact-info-row">
+                      <span className="contact-info-icon">📞</span> <span>{contact.phone}</span>
+                    </div>
+                  )}
                 </div>
               </div>
+
               {contact.tags?.length > 0 && (
-                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 10 }}>
                   {contact.tags.map(t => <span key={t} className="tag-pill">{t}</span>)}
                 </div>
               )}
+
+              {/* Suggestions / Actions Area */}
+              <div className="contact-suggestions">
+                <div className="contact-suggestions-label">Suggestions</div>
+                <div className="contact-actions">
+                  <button onClick={() => handleAddTag(cid)} className="contact-action-btn" title="Add Tag">+ 🏷 Tag</button>
+                  <button onClick={() => handleDelete(cid)} className="contact-action-btn danger" title="Delete Contact">🗑</button>
+                </div>
+              </div>
             </div>
           );
         })}

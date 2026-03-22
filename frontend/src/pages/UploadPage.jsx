@@ -101,11 +101,9 @@ export default function UploadPage() {
       </div>
 
       {/* Action Row */}
-      <div style={{ display:'flex', gap:12, marginBottom:24, flexWrap:'wrap', justifyContent:'center' }}>
-        <ActionCard icon={<Upload size={20}/>} title="Upload JSON" desc="Import from file" onClick={() => document.getElementById('file-input').click()} />
-        <ActionCard icon={<Database size={20}/>} title="Load from DB" desc="Open saved workflow" onClick={openDbModal} />
-        <ActionCard icon={<LayoutTemplate size={20}/>} title="Templates" desc="Start from template" onClick={openTplModal} />
-        <ActionCard icon={<Plus size={20}/>} title="Create New" desc="Blank workflow" onClick={createBlank} accent />
+      <div className="action-cards-grid">
+        <ActionCard icon={<Database size={24}/>} title="Load from DB" desc="Open saved workflow" onClick={openDbModal} />
+        <ActionCard icon={<LayoutTemplate size={24}/>} title="Templates" desc="Start from template" onClick={openTplModal} />
       </div>
 
       {/* Drop Zone */}

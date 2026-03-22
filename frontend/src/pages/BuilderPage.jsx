@@ -235,7 +235,7 @@ export default function BuilderPage() {
             if (!edgeMatches) return e;
             return {
               ...e, animated: true,
-              style: { stroke: log.status === 'failed' ? '#e74c3c' : '#27ae60', strokeWidth: 2.5, strokeDasharray: 'none' },
+              style: { stroke: log.status === 'failed' ? '#e74c3c' : '#3b82f6', strokeWidth: 2.5, strokeDasharray: 'none' },
               data: { ...e.data, traversed: true }
             };
           }));
