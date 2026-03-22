@@ -1,201 +1,189 @@
 import React from 'react';
 import { Handle, Position } from 'reactflow';
 
-// ── Drag handler — identical for all node types ─────────────────────
-function makeOnDragStart(data) {
-  return (e) => {
-    // DO NOT call e.stopPropagation() — it breaks the HTML5 drag session
-    e.dataTransfer.effectAllowed = 'copy';
-    e.dataTransfer.setData('application/quantixone-node', JSON.stringify({
-        nodeKind:   data.nodeKind,
-        actionType: data.actionType ?? null,
-        label:      data.label       ?? '',
-        config:     data.config      ?? {},
-        stepId:     data.stepId      ?? 'trigger',
-    }));
-  };
-}
-
-// ── Config summary helpers — NO raw JSON allowed ────────────────────
-function emailSummary(config) {
-  const lines = [];
-  if (config.to)      lines.push(`To: ${config.to}`);
-  if (config.subject) lines.push(`Subject: ${config.subject.length > 45 ? config.subject.slice(0,45)+'…' : config.subject}`);
-  return lines;
-}
-
-function smsSummary(config) {
-  const lines = [];
-  if (config.to)   lines.push(`To: ${config.to}`);
-  if (config.body) lines.push(`"${config.body.length > 50 ? config.body.slice(0,50)+'…' : config.body}"`);
-  return lines;
-}
-
-function movePipelineSummary(config) {
-  const lines = [];
-  if (config.target_stage) lines.push(`Move to stage: ${config.target_stage}`);
-  if (config.note) lines.push(`Note: ${config.note.slice(0, 40)}${config.note.length > 40 ? '…' : ''}`);
-  return lines;
-}
-
-function addTagSummary(config) {
-  if (!config.tags?.length) return ['No tags defined'];
-  return [`Tags: ${config.tags.join(', ')}`];
-}
-
-function updateContactSummary(config) {
-  const fields = Object.keys(config.field_updates ?? {});
-  if (!fields.length) return ['No field updates defined'];
-  return [`Updates: ${fields.slice(0, 3).join(', ')}${fields.length > 3 ? ' …' : ''}`];
-}
-
-function createOpportunitySummary(config) {
-  const lines = [];
-  if (config.name)        lines.push(`Name: ${config.name}`);
-  if (config.pipeline_id) lines.push(`Pipeline: ${config.pipeline_id}`);
-  return lines.length ? lines : ['New opportunity'];
-}
-
-function whatsappSummary(config) {
-  const lines = [];
-  if (config.to)   lines.push(`To: ${config.to}`);
-  if (config.body) lines.push(`"${config.body.slice(0, 50)}${config.body.length > 50 ? '…' : ''}"`);
-  return lines;
-}
-
-function conditionRuleSummary(rules) {
-  if (!rules?.length) return 'No rules defined';
-  const r = rules[0];
-  return `If "${r.field}" ${r.operator} ${JSON.stringify(r.value)}`;
-}
-
-const ACTION_META = {
-  send_email:         { icon: '✉',  color: '#1d4ed8', label: 'Send Email',     summary: emailSummary },
-  send_sms:           { icon: '💬', color: '#1d4ed8', label: 'Send SMS',       summary: smsSummary },
-  send_whatsapp:      { icon: '🟢', color: '#15803d', label: 'Send WhatsApp',  summary: whatsappSummary },
-  move_pipeline:      { icon: '⇢',  color: '#1d4ed8', label: 'Move Stage',     summary: movePipelineSummary },
-  add_tag:            { icon: '🏷', color: '#1d4ed8', label: 'Add Tag',        summary: addTagSummary },
-  update_contact:     { icon: '✏',  color: '#1d4ed8', label: 'Update Contact', summary: updateContactSummary },
-  create_opportunity: { icon: '💼', color: '#1d4ed8', label: 'Create Opp.',    summary: createOpportunitySummary },
+const NODE_COLORS = {
+  send_email:          '#1b6ac9',
+  send_sms:            '#27ae60',
+  send_whatsapp:       '#25d366',
+  add_tag:             '#e67e22',
+  update_contact:      '#e67e22',
+  move_pipeline:       '#e67e22',
+  create_opportunity:  '#e67e22',
+  condition:           '#f39c12',
+  delay:               '#8e44ad',
+  trigger:             '#6c63ff',
+  default:             '#9aa5b4',
 };
 
+function getNodeColor(data) {
+  if (data.actionType && NODE_COLORS[data.actionType]) return NODE_COLORS[data.actionType];
+  if (data.nodeKind && NODE_COLORS[data.nodeKind])  return NODE_COLORS[data.nodeKind];
+  return NODE_COLORS.default;
+}
 
-// ── Shared style helpers ────────────────────────────────────────────
-const nodeStyle = (borderColor) => ({
-  borderLeft: `3px solid ${borderColor}`,
-  background: '#ffffff',
-  border: '1px solid #e2e8f0',
-  borderRadius: 10,
-  padding: '12px 14px',
-  minWidth: 200,
-  maxWidth: 240,
-  fontFamily: 'Inter, sans-serif',
-  cursor: 'grab',
-  boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
-});
+function getSubtitle(data) {
+  const c = data.config || {};
+  switch (data.actionType) {
+    case 'send_email':          return c.to      ? `To: ${c.to}`            : 'Configure recipient';
+    case 'send_sms':            return c.to      ? `To: ${c.to}`            : 'Configure recipient';
+    case 'send_whatsapp':       return c.to      ? `To: ${c.to}`            : 'Configure recipient';
+    case 'add_tag':             return c.tags?.length ? `Tags: ${c.tags.join(', ')}` : 'No tags set';
+    case 'move_pipeline':       return c.target_stage ? `→ Stage: ${c.target_stage}` : 'Set target stage';
+    case 'update_contact':      return 'Update contact fields';
+    case 'create_opportunity':  return c.name || 'New opportunity';
+    default:                    return data.label || '';
+  }
+}
 
-const NodeType = ({ color, icon, label }) => (
-  <div style={{ fontSize: 10, fontWeight: 600, color, textTransform: 'uppercase',
-                letterSpacing: '0.5px', marginBottom: 4 }}>
-    {icon} {label}
-  </div>
+function AddBelowButton({ stepId }) {
+  return (
+    <div
+      style={{
+        position:  'absolute',
+        bottom:    -13,
+        left:      '50%',
+        transform: 'translateX(-50%)',
+        zIndex:    50,
+      }}
+      onMouseDown={e => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        window.dispatchEvent(new CustomEvent('add-node-below', {
+          detail: { sourceNodeId: stepId },
+        }));
+      }}
+    >
+      <div className="add-edge-btn">+</div>
+    </div>
+  );
+}
+
+function NodeCard({ data, color, children, handles, showAddBtn = true }) {
+  const dot = color || getNodeColor(data);
+  const execClass = data.isAnimating
+    ? 'exec-running'
+    : data.executionStatus === 'success'
+      ? 'exec-success'
+      : data.executionStatus === 'failed'
+        ? 'exec-failed'
+        : '';
+
+  return (
+    <div className={`wf-node ${execClass}`} style={{ borderTopColor: dot }}>
+      <div className="wf-node-header">
+        <div className="wf-node-dot" style={{ background: dot }} />
+        <div className="wf-node-info">
+          <div className="wf-node-title">{data.label}</div>
+          <div className="wf-node-subtitle">{getSubtitle(data)}</div>
+        </div>
+        <div className="wf-node-actions">
+          <button
+            className="wf-node-btn"
+            title="Info"
+            onClick={e => e.stopPropagation()}
+          >ℹ</button>
+          <button
+            className="wf-node-btn"
+            title="Remove node"
+            style={{ color: '#e74c3c' }}
+            onClick={(e) => {
+              e.stopPropagation();
+              window.dispatchEvent(new CustomEvent('remove-node', {
+                detail: { nodeId: data.stepId },
+              }));
+            }}
+          >✕</button>
+        </div>
+      </div>
+
+      {children}
+      {handles}
+      {showAddBtn && <AddBelowButton stepId={data.stepId} />}
+    </div>
+  );
+}
+
+/* Trigger Node */
+export const TriggerNode = ({ data }) => (
+  <NodeCard data={data} color={NODE_COLORS.trigger} showAddBtn={false}>
+    <Handle type="source" position={Position.Bottom} />
+    <div className="wf-node-desc">Workflow execution starts from this node</div>
+    <div className="wf-node-handles">
+      {['Incoming SMS', 'Incoming Call', 'API Request'].map(h => (
+        <span key={h} className="wf-handle-label">
+          <span className="wf-handle-square" />
+          {h}
+        </span>
+      ))}
+    </div>
+  </NodeCard>
 );
 
-const NodeTitle = ({ children }) => (
-  <div style={{ fontSize: 14, fontWeight: 500, color: '#0f172a', marginBottom: 2 }}>
-    {children}
-  </div>
-);
-
-const NodeBody = ({ children }) => (
-  <div style={{ fontSize: 11, color: '#64748b', marginTop: 3, lineHeight: 1.4 }}>
-    {children}
-  </div>
-);
-
-const TagRow = ({ tags, color, textColor }) => (
-  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 5 }}>
-    {tags.map(t => (
-      <span key={t} style={{ background: color, color: textColor, fontSize: 10,
-                             padding: '1px 6px', borderRadius: 10 }}>
-        {t}
+/* Action Node */
+export const ActionNode = ({ data }) => (
+  <NodeCard data={data}>
+    <Handle type="target" position={Position.Top} />
+    <div className="wf-node-handles">
+      <span className="wf-handle-label">
+        <span className="wf-handle-square" style={{ borderColor: '#27ae60' }} />
+        Completed
       </span>
-    ))}
-  </div>
-);
-
-const HandleLabels = ({ left, right, leftColor, rightColor }) => (
-  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
-    <span style={{ fontSize: 10, color: leftColor }}>{left}</span>
-    <span style={{ fontSize: 10, color: rightColor }}>{right}</span>
-  </div>
-);
-
-
-// ── Node Components ─────────────────────────────────────────────────
-
-export const TriggerNode = ({ data }) => {
-  const filters  = data.config?.filters ?? {};
-  const sources  = filters.source ?? [];
-  const incTags  = filters.tags_include_any ?? [];
-  const excTags  = filters.tags_exclude_all ?? [];
-
-  return (
-    <div draggable={true} onDragStart={makeOnDragStart(data)} style={nodeStyle('#f59e0b')}>
-      <Handle type="source" position={Position.Bottom} />
-      <NodeType color="#b45309" icon="⚡" label="Trigger" />
-      <NodeTitle>{data.label}</NodeTitle>
-      {sources.length > 0 && <NodeBody>Source: {sources.join(', ')}</NodeBody>}
-      {incTags.length > 0 && <TagRow tags={incTags} color="#fef3c7" textColor="#92400e" />}
-      {excTags.length > 0 && <NodeBody>Exclude: {excTags.join(', ')}</NodeBody>}
+      <span className="wf-handle-label">
+        <span className="wf-handle-square" style={{ borderColor: '#e74c3c' }} />
+        Failed
+      </span>
     </div>
-  );
-};
+    <Handle type="source" position={Position.Bottom} id="success"
+      style={{ left: '30%', background: '#27ae60', width: 8, height: 8, borderRadius: 2 }} />
+    <Handle type="source" position={Position.Bottom} id="failure"
+      style={{ left: '70%', background: '#e74c3c', width: 8, height: 8, borderRadius: 2 }} />
+  </NodeCard>
+);
 
-export const ActionNode = ({ data }) => {
-  const meta    = ACTION_META[data.actionType] ?? { icon: '⚙', color: '#1d4ed8', label: 'Action' };
-  const summary = meta.summary ? meta.summary(data.config ?? {}) : [];
-
+/* Condition Node */
+export const ConditionNode = ({ data }) => {
+  const rules = data.config?.rules || [];
+  const summary = rules.length
+    ? `If "${rules[0].field}" ${rules[0].operator} ${JSON.stringify(rules[0].value)}`
+    : 'No rules defined';
   return (
-    <div draggable={true} onDragStart={makeOnDragStart(data)} style={nodeStyle('#3b82f6')}>
+    <NodeCard data={data} color={NODE_COLORS.condition}>
       <Handle type="target" position={Position.Top} />
-      <NodeType color={meta.color} icon={meta.icon} label={meta.label} />
-      <NodeTitle>{data.label}</NodeTitle>
-      {summary.map((line, i) => <NodeBody key={i}>{line}</NodeBody>)}
-      <HandleLabels left="● success" right="● failure" leftColor="#16a34a" rightColor="#dc2626" />
-      <Handle type="source" position={Position.Bottom} id="success"
-              style={{ left: '25%', background: '#16a34a', width: 8, height: 8 }} />
-      <Handle type="source" position={Position.Bottom} id="failure"
-              style={{ left: '75%', background: '#dc2626', width: 8, height: 8 }} />
-    </div>
+      <div className="wf-node-desc">{summary}</div>
+      <div className="wf-node-handles">
+        <span className="wf-handle-label">
+          <span className="wf-handle-square" style={{ borderColor: '#27ae60' }} />True
+        </span>
+        <span className="wf-handle-label">
+          <span className="wf-handle-square" style={{ borderColor: '#e74c3c' }} />False
+        </span>
+      </div>
+      <Handle type="source" position={Position.Bottom} id="true"
+        style={{ left: '30%', background: '#27ae60', width: 8, height: 8, borderRadius: 2 }} />
+      <Handle type="source" position={Position.Bottom} id="false"
+        style={{ left: '70%', background: '#e74c3c', width: 8, height: 8, borderRadius: 2 }} />
+    </NodeCard>
   );
 };
 
-export const ConditionNode = ({ data }) => (
-  <div draggable={true} onDragStart={makeOnDragStart(data)} style={nodeStyle('#8b5cf6')}>
-    <Handle type="target" position={Position.Top} />
-    <NodeType color="#5b21b6" icon="⑂" label="Condition" />
-    <NodeTitle>{data.label}</NodeTitle>
-    <NodeBody>{conditionRuleSummary(data.rules)}</NodeBody>
-    <HandleLabels left="✓ True" right="✗ False" leftColor="#16a34a" rightColor="#dc2626" />
-    <Handle type="source" position={Position.Bottom} id="true"
-            style={{ left: '25%', background: '#16a34a', width: 8, height: 8 }} />
-    <Handle type="source" position={Position.Bottom} id="false"
-            style={{ left: '75%', background: '#dc2626', width: 8, height: 8 }} />
-  </div>
-);
+/* Delay Node */
+export const DelayNode = ({ data }) => {
+  const c = data.config || {};
+  return (
+    <NodeCard data={data} color={NODE_COLORS.delay}>
+      <Handle type="target" position={Position.Top} />
+      <div className="wf-node-desc">Wait {c.duration || '?'} {c.unit || 'seconds'}</div>
+      <div className="wf-node-handles">
+        <span className="wf-handle-label">
+          <span className="wf-handle-square" />After delay
+        </span>
+      </div>
+      <Handle type="source" position={Position.Bottom} id="complete"
+        style={{ background: '#8e44ad', width: 8, height: 8, borderRadius: 2 }} />
+    </NodeCard>
+  );
+};
 
-export const DelayNode = ({ data }) => (
-  <div draggable={true} onDragStart={makeOnDragStart(data)} style={nodeStyle('#14b8a6')}>
-    <Handle type="target" position={Position.Top} />
-    <NodeType color="#0f6e56" icon="⏱" label="Delay" />
-    <NodeTitle>{data.label}</NodeTitle>
-    <NodeBody>Wait: {data.duration} {data.unit}</NodeBody>
-    <Handle type="source" position={Position.Bottom} id="complete" />
-  </div>
-);
-
-// ── Export node types map ────────────────────────────────────────────
 export const nodeTypes = {
   triggerNode:   TriggerNode,
   actionNode:    ActionNode,

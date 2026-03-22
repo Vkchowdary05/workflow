@@ -1,357 +1,223 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { extractWorkflow, validateWorkflow } from '../utils/parser';
-import { workflowAPI } from '../services/api';
+import { workflowAPI, templatesAPI } from '../services/api';
+import { Upload, Database, LayoutTemplate, Plus } from 'lucide-react';
 
-const UploadPage = () => {
-  const navigate = useNavigate();
-  const [error, setError] = useState(null);
-  const [preview, setPreview] = useState(null);
-  const [rawJson, setRawJson] = useState(null);
-  const [isDragOver, setIsDragOver] = useState(false);
-  const [showModal, setShowModal] = useState(false);
-  const [workflowsList, setWorkflowsList] = useState([]);
-  const [loadingList, setLoadingList] = useState(false);
+export default function UploadPage() {
+  const navigate      = useNavigate();
+  const [error, setError]       = useState(null);
+  const [preview, setPreview]   = useState(null);
+  const [rawJson, setRawJson]   = useState(null);
+  const [dragOver, setDragOver] = useState(false);
 
+  /* ── modals ── */
+  const [showDbModal, setShowDbModal]   = useState(false);
+  const [showTplModal, setShowTplModal] = useState(false);
+  const [dbList, setDbList]             = useState([]);
+  const [tplList, setTplList]           = useState([]);
+  const [loadingDb, setLoadingDb]       = useState(false);
+  const [loadingTpl, setLoadingTpl]     = useState(false);
+
+  /* ── File processing ── */
   const processFile = useCallback((file) => {
-    if (!file || !file.name.endsWith('.json')) {
-      setError('Please upload a .json file.');
-      return;
-    }
+    if (!file || !file.name.endsWith('.json')) { setError('Please upload a .json file.'); return; }
     const reader = new FileReader();
     reader.onload = (evt) => {
       try {
-        const parsed = JSON.parse(evt.target.result);
+        const parsed    = JSON.parse(evt.target.result);
         const extracted = extractWorkflow(parsed);
-        const validation = validateWorkflow(extracted.trigger, extracted.steps);
-
-        if (!validation.valid) {
-          setError(validation.error);
-          setPreview(null);
-          setRawJson(null);
-          return;
-        }
-
-        setError(null);
-        setPreview(extracted);
-        setRawJson(parsed);
-      } catch (e) {
-        setError(`Invalid JSON: ${e.message}`);
-        setPreview(null);
-        setRawJson(null);
-      }
+        const validation= validateWorkflow(extracted.trigger, extracted.steps);
+        if (!validation.valid) { setError(validation.error); setPreview(null); setRawJson(null); return; }
+        setError(null); setPreview(extracted); setRawJson(parsed);
+      } catch (e) { setError(`Invalid JSON: ${e.message}`); setPreview(null); setRawJson(null); }
     };
     reader.readAsText(file);
   }, []);
 
-  const handleDrop = useCallback((e) => {
-    e.preventDefault();
-    setIsDragOver(false);
-    const file = e.dataTransfer.files[0];
-    processFile(file);
-  }, [processFile]);
+  const handleDrop = useCallback(e => { e.preventDefault(); setDragOver(false); processFile(e.dataTransfer.files[0]); }, [processFile]);
+  const handleFileInput = useCallback(e => processFile(e.target.files[0]), [processFile]);
+  const openBuilder = () => navigate('/builder', { state: { rawJson, extracted: preview } });
 
-  const handleFileInput = useCallback((e) => {
-    processFile(e.target.files[0]);
-  }, [processFile]);
-
-  const handleOpenBuilder = () => {
-    navigate('/builder', { state: { rawJson, extracted: preview } });
+  /* ── Load from DB ── */
+  const openDbModal = async () => {
+    setShowDbModal(true); setLoadingDb(true);
+    try { const res = await workflowAPI.list(); setDbList(res.data || []); } catch {} finally { setLoadingDb(false); }
   };
-
-  const handleLoadFromDB = async () => {
-    setLoadingList(true);
-    try {
-      const res = await workflowAPI.list();
-      setWorkflowsList(res.data || []);
-      setShowModal(true);
-    } catch {
-      setError('Failed to load workflows from database.');
-    } finally {
-      setLoadingList(false);
-    }
-  };
-
-  const handleSelectWorkflow = async (id) => {
+  const selectFromDb = async (id) => {
     try {
       const res = await workflowAPI.getById(id);
-      const extracted = extractWorkflow(res.data);
-      navigate('/builder', { state: { rawJson: res.data, extracted } });
-    } catch {
-      setError('Failed to load workflow.');
-    }
+      const ext = extractWorkflow(res.data);
+      navigate('/builder', { state: { rawJson: res.data, extracted: ext } });
+    } catch {}
+    setShowDbModal(false);
   };
 
-  // Step type breakdown
-  const getBreakdown = (steps) => {
-    let actions = 0, conditions = 0, delays = 0;
-    for (const s of steps) {
-      if (s.type === 'condition') conditions++;
-      else if (s.type === 'delay') delays++;
-      else actions++;
-    }
-    return { actions, conditions, delays };
+  /* ── Templates ── */
+  const openTplModal = async () => {
+    setShowTplModal(true); setLoadingTpl(true);
+    try { const res = await templatesAPI.list(); setTplList(res.data?.templates || []); } catch {} finally { setLoadingTpl(false); }
+  };
+  const cloneTemplate = async (tplId) => {
+    try {
+      const res = await templatesAPI.clone(tplId, {});
+      const wfRes = await workflowAPI.getById(res.data.workflow_id);
+      const ext = extractWorkflow(wfRes.data);
+      navigate('/builder', { state: { rawJson: wfRes.data, extracted: ext } });
+    } catch {}
+    setShowTplModal(false);
+  };
+
+  /* ── Create blank ── */
+  const createBlank = async () => {
+    try {
+      const res = await workflowAPI.create({
+        name: 'Untitled Workflow',
+        description: '',
+        trigger: { type: 'contact_created', label: 'Contact Created', config: {} },
+        steps: [],
+        tags: [],
+      });
+      const id = res.data.workflow_id;
+      const wfRes = await workflowAPI.getById(id);
+      const ext = extractWorkflow(wfRes.data);
+      navigate('/builder', { state: { rawJson: wfRes.data, extracted: ext } });
+    } catch {}
+  };
+
+  const breakdown = (steps = []) => {
+    let a=0,c=0,d=0;
+    for (const s of steps) { if(s.type==='condition') c++; else if(s.type==='delay') d++; else a++; }
+    return `${a} actions · ${c} conditions · ${d} delays`;
   };
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: 'linear-gradient(135deg, #f0f4ff 0%, #e8ecf8 50%, #f5f3ff 100%)',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      fontFamily: 'Inter, sans-serif',
-      padding: '40px 20px',
-    }}>
-      {/* Header */}
-      <div style={{ textAlign: 'center', marginBottom: 32 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 8 }}>
-          <div style={{
-            width: 14, height: 14, borderRadius: '50%', background: '#6366f1',
-            boxShadow: '0 0 0 0 rgba(99,102,241,0.5)', animation: 'pulse 2s infinite',
-          }} />
-          <h1 style={{
-            fontSize: 28, fontWeight: 700, margin: 0, fontFamily: 'Outfit, sans-serif',
-            background: 'linear-gradient(135deg, #1e1b4b, #4f46e5)',
-            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-          }}>
-            Quantixone Workflow Builder
-          </h1>
-        </div>
-        <p style={{ fontSize: 14, color: '#64748b', margin: 0 }}>
-          Upload a workflow JSON file to visualize, edit, and execute
-        </p>
+    <div className="upload-page">
+      <div style={{ textAlign:'center', marginBottom:32 }}>
+        <h1 style={{ fontFamily:'var(--font-heading)', fontSize:24, fontWeight:700, color:'var(--text-primary)', marginBottom:6 }}>
+          Quantixone Workflow Builder
+        </h1>
+        <p style={{ fontSize:13, color:'var(--text-muted)' }}>Create, import, or pick a template to get started</p>
       </div>
 
-      {/* Drop zone */}
+      {/* Action Row */}
+      <div style={{ display:'flex', gap:12, marginBottom:24, flexWrap:'wrap', justifyContent:'center' }}>
+        <ActionCard icon={<Upload size={20}/>} title="Upload JSON" desc="Import from file" onClick={() => document.getElementById('file-input').click()} />
+        <ActionCard icon={<Database size={20}/>} title="Load from DB" desc="Open saved workflow" onClick={openDbModal} />
+        <ActionCard icon={<LayoutTemplate size={20}/>} title="Templates" desc="Start from template" onClick={openTplModal} />
+        <ActionCard icon={<Plus size={20}/>} title="Create New" desc="Blank workflow" onClick={createBlank} accent />
+      </div>
+
+      {/* Drop Zone */}
       <div
-        onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
-        onDragLeave={() => setIsDragOver(false)}
+        className={`drop-zone ${dragOver ? 'drag-over' : ''}`}
+        style={{ width:'100%', maxWidth:520 }}
+        onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
         onClick={() => document.getElementById('file-input').click()}
-        style={{
-          width: '100%',
-          maxWidth: 520,
-          border: `2px dashed ${isDragOver ? '#6366f1' : '#a5b4fc'}`,
-          borderRadius: 14,
-          padding: '48px 32px',
-          textAlign: 'center',
-          cursor: 'pointer',
-          background: isDragOver ? '#eef2ff' : '#ffffff',
-          transition: 'all 0.2s ease',
-          boxShadow: isDragOver ? '0 0 24px rgba(99,102,241,0.15)' : '0 4px 12px rgba(0,0,0,0.04)',
-        }}
       >
-        <div style={{ fontSize: 42, marginBottom: 12 }}>📁</div>
-        <div style={{ fontSize: 15, fontWeight: 500, color: '#1e1b4b', marginBottom: 6 }}>
-          {isDragOver ? 'Drop your JSON file here' : 'Drag & drop your workflow JSON'}
-        </div>
-        <div style={{ fontSize: 12, color: '#94a3b8' }}>
-          or click to browse • .json files only
-        </div>
-        <input
-          id="file-input"
-          type="file"
-          accept=".json"
-          onChange={handleFileInput}
-          style={{ display: 'none' }}
-        />
+        <div className="drop-zone-icon">📁</div>
+        <div className="drop-zone-title">{dragOver ? 'Drop JSON file here' : 'Drag & drop JSON workflow'}</div>
+        <div className="drop-zone-sub">or click to browse</div>
       </div>
+      <input id="file-input" type="file" accept=".json" onChange={handleFileInput} style={{ display:'none' }} />
 
-      {/* Load from DB button */}
-      <button
-        onClick={handleLoadFromDB}
-        disabled={loadingList}
-        style={{
-          marginTop: 14,
-          padding: '8px 20px',
-          fontSize: 13,
-          fontWeight: 500,
-          color: '#4f46e5',
-          background: 'transparent',
-          border: '1px solid #c7d2fe',
-          borderRadius: 8,
-          cursor: 'pointer',
-          transition: 'all 0.15s',
-        }}
-      >
-        {loadingList ? '⏳ Loading...' : '📂 Load from Database'}
-      </button>
-
-      {/* Error banner */}
       {error && (
-        <div style={{
-          marginTop: 20,
-          maxWidth: 520,
-          width: '100%',
-          background: '#fef2f2',
-          border: '1px solid #fca5a5',
-          borderRadius: 10,
-          padding: '12px 16px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          gap: 10,
-        }}>
-          <span style={{ fontSize: 13, color: '#dc2626', lineHeight: 1.5 }}>{error}</span>
-          <button
-            onClick={() => setError(null)}
-            style={{
-              background: 'none', border: 'none', color: '#dc2626', fontSize: 16,
-              cursor: 'pointer', padding: 0, lineHeight: 1, flexShrink: 0,
-            }}
-          >✕</button>
+        <div style={{ marginTop:16, maxWidth:520, width:'100%', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'var(--radius-md)', padding:'10px 14px', color:'#991b1b', fontSize:13 }}>
+          {error}
         </div>
       )}
 
-      {/* Preview card */}
       {preview && (
-        <div style={{
-          marginTop: 20,
-          maxWidth: 520,
-          width: '100%',
-          background: '#ffffff',
-          border: '1px solid #e2e8f0',
-          borderRadius: 14,
-          padding: '20px 24px',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
-        }}>
-          <h2 style={{ fontSize: 18, fontWeight: 600, color: '#0f172a', margin: '0 0 6px' }}>
-            {preview.name}
-          </h2>
-          {preview.description && (
-            <p style={{ fontSize: 13, color: '#64748b', margin: '0 0 12px', lineHeight: 1.5 }}>
-              {preview.description.length > 120
-                ? preview.description.slice(0, 120) + '…'
-                : preview.description}
-            </p>
-          )}
-
-          {/* Tags */}
-          {preview.tags?.length > 0 && (
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-              {preview.tags.map(t => (
-                <span key={t} style={{
-                  background: '#eef2ff', color: '#4338ca', fontSize: 11,
-                  padding: '2px 10px', borderRadius: 12, fontWeight: 500,
-                }}>{t}</span>
-              ))}
+        <div className="card" style={{ marginTop:16, maxWidth:520, width:'100%' }}>
+          <div className="card-body">
+            <h3 style={{ fontSize:16, fontWeight:600, marginBottom:8 }}>{preview.name}</h3>
+            <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:14 }}>
+              <span className="badge badge-info">{preview.steps.length} steps</span>
+              <span className="badge badge-inactive">{breakdown(preview.steps)}</span>
             </div>
-          )}
-
-          {/* Stats */}
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-            <span style={badgeStyle('#f1f5f9', '#475569')}>
-              {preview.steps.length} steps
-            </span>
-            {(() => {
-              const { actions, conditions, delays } = getBreakdown(preview.steps);
-              return (
-                <span style={badgeStyle('#f1f5f9', '#475569')}>
-                  {actions} actions · {conditions} conditions · {delays} delays
-                </span>
-              );
-            })()}
-            <span style={badgeStyle('#fef3c7', '#92400e')}>
-              Trigger: {preview.trigger?.type}
-            </span>
+            <button className="btn btn-primary" style={{ width:'100%', justifyContent:'center' }} onClick={openBuilder}>
+              Open in Builder →
+            </button>
           </div>
-
-          {/* Open in Builder button */}
-          <button
-            onClick={handleOpenBuilder}
-            style={{
-              width: '100%',
-              padding: '10px 0',
-              fontSize: 14,
-              fontWeight: 600,
-              color: '#fff',
-              background: 'linear-gradient(135deg, #16a34a, #15803d)',
-              border: 'none',
-              borderRadius: 8,
-              cursor: 'pointer',
-              transition: 'all 0.15s',
-              boxShadow: '0 2px 8px rgba(22,163,74,0.3)',
-            }}
-          >
-            Open in Builder →
-          </button>
         </div>
       )}
 
-      {/* Database workflows modal */}
-      {showModal && (
-        <div
-          onClick={() => setShowModal(false)}
-          style={{
-            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)',
-            display: 'flex', justifyContent: 'center', alignItems: 'center',
-            zIndex: 100,
-          }}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            style={{
-              background: '#fff', borderRadius: 14, padding: '24px',
-              width: '90%', maxWidth: 480, maxHeight: '70vh', overflowY: 'auto',
-              boxShadow: '0 20px 40px rgba(0,0,0,0.15)',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Select Workflow</h2>
-              <button
-                onClick={() => setShowModal(false)}
-                style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#475569' }}
-              >✕</button>
-            </div>
-            {workflowsList.length === 0 ? (
-              <p style={{ textAlign: 'center', color: '#94a3b8', padding: '24px 0', fontSize: 13 }}>
-                No workflows stored in database.
-              </p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {workflowsList.map(wf => {
-                  const id = wf.workflow_id || wf.id || wf._id;
-                  return (
-                    <div
-                      key={id}
-                      onClick={() => handleSelectWorkflow(id)}
-                      style={{
-                        padding: '12px 14px',
-                        background: '#f8fafc',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: 8,
-                        cursor: 'pointer',
-                        transition: 'border-color 0.15s',
-                      }}
-                    >
-                      <div style={{ fontWeight: 600, fontSize: 14, color: '#0f172a' }}>
-                        {wf.name || 'Unnamed Workflow'}
+      {/* DB Modal */}
+      {showDbModal && (
+        <div className="modal-overlay" onClick={() => setShowDbModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header"><span className="modal-title">Load from Database</span><button onClick={() => setShowDbModal(false)} style={{background:'none',border:'none',cursor:'pointer',fontSize:18,color:'var(--text-muted)'}}>×</button></div>
+            <div className="modal-body">
+              {loadingDb ? <p style={{color:'var(--text-muted)'}}>Loading…</p> : dbList.length === 0 ? <p style={{color:'var(--text-muted)'}}>No saved workflows found.</p> : (
+                <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                  {dbList.map(wf => {
+                    const id = wf.workflow_id || wf.id || wf._id;
+                    return (
+                      <div key={id} onClick={() => selectFromDb(id)} style={{
+                        padding:'10px 14px', border:'1px solid var(--border)', borderRadius:'var(--radius-md)', cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', transition:'background 0.12s'
+                      }} onMouseEnter={e=>e.currentTarget.style.background='var(--bg-hover)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                        <div>
+                          <div style={{ fontWeight:600, fontSize:13 }}>{wf.name || 'Untitled'}</div>
+                          <div style={{ fontSize:11, color:'var(--text-muted)' }}>{wf.steps?.length ?? 0} steps</div>
+                        </div>
+                        <span className={`badge ${wf.status === 'active' ? 'badge-success' : 'badge-inactive'}`}>{wf.status || 'draft'}</span>
                       </div>
-                      <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
-                        {wf.steps?.length ?? '?'} steps · Created: {wf.created_at ? new Date(wf.created_at).toLocaleDateString() : 'Unknown'}
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Template Modal */}
+      {showTplModal && (
+        <div className="modal-overlay" onClick={() => setShowTplModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header"><span className="modal-title">Choose a Template</span><button onClick={() => setShowTplModal(false)} style={{background:'none',border:'none',cursor:'pointer',fontSize:18,color:'var(--text-muted)'}}>×</button></div>
+            <div className="modal-body">
+              {loadingTpl ? <p style={{color:'var(--text-muted)'}}>Loading…</p> : tplList.length === 0 ? <p style={{color:'var(--text-muted)'}}>No templates available.</p> : (
+                <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                  {tplList.map(tpl => (
+                    <div key={tpl.template_id} onClick={() => cloneTemplate(tpl.template_id)} style={{
+                      padding:'12px 14px', border:'1px solid var(--border)', borderRadius:'var(--radius-md)', cursor:'pointer', transition:'background 0.12s'
+                    }} onMouseEnter={e=>e.currentTarget.style.background='var(--bg-hover)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                      <div style={{ fontWeight:600, fontSize:13, marginBottom:4 }}>{tpl.name}</div>
+                      <div style={{ fontSize:11, color:'var(--text-muted)' }}>{tpl.description}</div>
+                      <div style={{ display:'flex', gap:5, flexWrap:'wrap', marginTop:6 }}>
+                        {(tpl.tags||[]).map(t => <span key={t} className="tag-pill">{t}</span>)}
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
     </div>
   );
-};
+}
 
-const badgeStyle = (bg, color) => ({
-  background: bg,
-  color,
-  fontSize: 11,
-  padding: '2px 10px',
-  borderRadius: 12,
-  fontWeight: 500,
-});
-
-export default UploadPage;
+function ActionCard({ icon, title, desc, onClick, accent }) {
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        width: 120, padding:'18px 12px', textAlign:'center', borderRadius:'var(--radius-lg)',
+        border: accent ? '2px solid var(--accent-green)' : '1px solid var(--border)',
+        background: accent ? '#f0fdf4' : 'var(--bg-card)',
+        cursor:'pointer', transition:'all 0.15s', boxShadow:'var(--shadow-sm)',
+      }}
+      onMouseEnter={e => { e.currentTarget.style.transform='translateY(-2px)'; e.currentTarget.style.boxShadow='var(--shadow-md)'; }}
+      onMouseLeave={e => { e.currentTarget.style.transform='none'; e.currentTarget.style.boxShadow='var(--shadow-sm)'; }}
+    >
+      <div style={{ color: accent ? 'var(--accent-green)' : 'var(--accent-blue)', marginBottom:8, display:'flex', justifyContent:'center' }}>{icon}</div>
+      <div style={{ fontSize:13, fontWeight:600, color:'var(--text-primary)', marginBottom:2 }}>{title}</div>
+      <div style={{ fontSize:11, color:'var(--text-muted)' }}>{desc}</div>
+    </div>
+  );
+}

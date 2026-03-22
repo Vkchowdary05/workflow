@@ -34,3 +34,19 @@ async def list_triggers():
 async def list_actions():
     """Return all available action types with applies_to metadata."""
     return {"actions": ACTIONS}
+
+
+@router.post("/triggers/{trigger_type}/test")
+async def test_trigger(trigger_type: str, payload: dict = {}):
+    known = [t["type"] for t in TRIGGERS]
+    if trigger_type not in known:
+        return {"valid": False, "message": f"Unknown trigger type: {trigger_type}"}
+    return {"valid": True, "message": f"Trigger '{trigger_type}' is valid and registered."}
+
+@router.post("/actions/{action_type}/test")
+async def test_action(action_type: str, payload: dict = {}):
+    known = [a["type"] for a in ACTIONS]
+    if action_type not in known:
+        return {"success": False, "result": {"error": f"Unknown action: {action_type}"}}
+    return {"success": True, "result": {"simulated": True, "action_type": action_type}}
+

@@ -3,7 +3,7 @@ import { contactsAPI, opportunitiesAPI, messagesAPI } from '../services/api';
 import { parseDropData } from '../utils/dragHelpers';
 import CollapsiblePanel from './CollapsiblePanel';
 
-const ContactsPanel = ({ showToast }) => {
+const ContactsPanel = ({ showToast, compact }) => {
   const [contacts, setContacts]       = useState([]);
   const [panelDragOver, setPanelOver] = useState(false);
   const [cardDragOver, setCardOver]   = useState(null);

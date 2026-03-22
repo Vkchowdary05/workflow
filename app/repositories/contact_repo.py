@@ -69,3 +69,20 @@ async def add_tags(contact_id: str, tags: list[str]) -> dict | None:
         return_document=True,
     )
     return result
+
+
+async def search(query: str = "", tags: list = None) -> list[dict]:
+    filter_dict = {}
+    conditions = []
+    if query:
+        conditions.append({"$or": [
+            {"name": {"$regex": query, "$options": "i"}},
+            {"email": {"$regex": query, "$options": "i"}},
+        ]})
+    if tags:
+        conditions.append({"tags": {"$in": tags}})
+    if conditions:
+        filter_dict = {"$and": conditions} if len(conditions) > 1 else conditions[0]
+    cursor = _collection().find(filter_dict)
+    return await cursor.to_list(length=100)
+

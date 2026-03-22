@@ -22,6 +22,8 @@ MAX_STEPS = 100
 
 
 async def execute_workflow(workflow: dict) -> dict:
+    from datetime import datetime, timezone
+    start_time = datetime.now(timezone.utc)
     """
     Execute the given workflow and return the execution record (dict).
 
@@ -128,6 +130,15 @@ async def execute_workflow(workflow: dict) -> dict:
         "step_logs": step_logs,
     }
     execution = await execution_repo.create(execution_data)
+    
+    from app.repositories import analytics_repo
+    duration_ms = int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
+    await analytics_repo.record_event({
+        "workflow_id": workflow_id,
+        "execution_id": str(execution["_id"]),
+        "status": overall_status,
+        "duration_ms": duration_ms,
+    })
 
     return _format_execution(execution)
 

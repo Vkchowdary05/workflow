@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { workflowAPI } from '../services/api';
 import CollapsiblePanel from './CollapsiblePanel';
 
-const ExecutionLogs = ({ currentWorkflowId }) => {
+const ExecutionLogs = ({ currentWorkflowId, compact }) => {
   const [executions, setExecutions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedExec, setSelectedExec] = useState(null);

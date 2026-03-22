@@ -60,3 +60,12 @@ async def add_tags(contact_id: str, payload: TagsAdd):
     """Add tags to a contact."""
     return await contact_service.add_tags_to_contact(contact_id, payload.tags)
 
+
+@router.get("/search/")
+async def search_contacts(q: str = "", tags: str = "", limit: int = 50):
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
+    from app.repositories.contact_repo import search
+    results = await search(q, tag_list)
+    return [contact_service._format_contact(c) for c in results[:limit]]
+
+

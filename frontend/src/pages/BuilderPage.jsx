@@ -1,32 +1,35 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useNodesState, useEdgesState, addEdge } from 'reactflow';
 import FlowCanvas from '../components/FlowCanvas';
-import ExecutionLogs from '../components/ExecutionLogs';
-import ContactsPanel from '../components/ContactsPanel';
-import OpportunitiesPanel from '../components/OpportunitiesPanel';
-import ExecutePanel from '../components/ExecutePanel';
+import LeftSidebar from '../components/LeftSidebar';
+import RightConfigPanel from '../components/RightConfigPanel';
+import AddNodeModal from '../components/AddNodeModal';
 import ToastContainer from '../components/Toast';
 import { parseWorkflowToReactFlow, prepareForSave, extractWorkflow } from '../utils/parser';
 import { workflowAPI } from '../services/api';
+import { Save, Trash2, Play, Copy } from 'lucide-react';
 
-const BuilderPage = () => {
+export default function BuilderPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const { rawJson, extracted } = location.state ?? {};
+  const rfInstance = useRef(null);
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [workflowId, setWorkflowId]      = useState(null);
   const [workflowName, setWorkflowName]  = useState('Untitled Workflow');
   const [isActive, setIsActive]          = useState(false);
-  const [isLocked, setIsLocked]          = useState(false);
-
   const [toasts, setToasts]              = useState([]);
   const [saving, setSaving]              = useState(false);
   const [refreshLogs, setRefreshLogs]    = useState(0);
+  const [selectedNodeId, setSelectedNodeId] = useState(null);
+  const [addModal, setAddModal] = useState(null);
 
-  const onConnect = useCallback((params) => setEdges((eds) => addEdge(params, eds)), [setEdges]);
+  const selectedNode = nodes.find(n => n.id === selectedNodeId) || null;
+
+  const onConnect = useCallback(p => setEdges(eds => addEdge({ ...p, type:'smoothstep', style:{stroke:'#c5cdd6',strokeWidth:1.5} }, eds)), [setEdges]);
 
   const showToast = useCallback((message, type = 'info') => {
     const id = Date.now() + Math.random();
@@ -34,69 +37,91 @@ const BuilderPage = () => {
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3500);
   }, []);
 
-  // On mount: import workflow and set up canvas
+  /* ── Mount ── */
   useEffect(() => {
     if (!extracted) {
-      // Page was refreshed — try to restore
       const savedId = sessionStorage.getItem('currentWorkflowId');
       if (savedId) {
         setWorkflowId(savedId);
-        // Fetch the workflow from DB and restore the canvas
         workflowAPI.getById(savedId).then(res => {
           if (!res.data) return;
           const ext = extractWorkflow(res.data);
           const { nodes: n, edges: e } = parseWorkflowToReactFlow(ext);
-          setNodes(n);
-          setEdges(e);
+          setNodes(n); setEdges(e);
           setWorkflowName(ext.name || 'Untitled Workflow');
           setIsActive(ext.settings?.status === 'active');
-        }).catch(err => console.error('Failed to restore workflow', err));
+        }).catch(() => {});
       }
       return;
     }
-
     const init = async () => {
-      // Check if we already have an ID for this workflow
       const existingId = rawJson?.workflow_id || rawJson?.id || rawJson?._id;
-
       if (existingId) {
-        // Workflow came from DB — use its existing ID, don't re-import
         setWorkflowId(existingId);
         sessionStorage.setItem('currentWorkflowId', existingId);
       } else {
-        // Fresh upload — import once
         try {
           const res = await workflowAPI.import(rawJson);
           const newId = res.data.workflow_id;
           setWorkflowId(newId);
           sessionStorage.setItem('currentWorkflowId', newId);
-        } catch (err) {
-          console.error('Import failed', err);
-        }
+        } catch {}
       }
-
-      // Parse to ReactFlow
       const { nodes: n, edges: e } = parseWorkflowToReactFlow(extracted);
-      setNodes(n);
-      setEdges(e);
+      setNodes(n); setEdges(e);
       setWorkflowName(extracted.name || 'Untitled Workflow');
       setIsActive(extracted.settings?.status === 'active');
     };
     init();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line
 
-  // Handlers
+  /* ── Event listeners ── */
+  useEffect(() => {
+    const handleAddBelow = (e) => {
+      const { sourceNodeId } = e.detail;
+      const sourceNode = nodes.find(n => n.data.stepId === sourceNodeId || n.id === sourceNodeId);
+      setAddModal({
+        sourceNodeId: sourceNode?.id || sourceNodeId,
+        sourcePosition: sourceNode?.position || { x: 300, y: 200 },
+      });
+    };
+    const handleRemove = (e) => {
+      const { nodeId } = e.detail;
+      setNodes(nds => nds.filter(n => n.id !== nodeId && n.data.stepId !== nodeId));
+      setEdges(eds => eds.filter(ed => ed.source !== nodeId && ed.target !== nodeId));
+      if (selectedNodeId === nodeId) setSelectedNodeId(null);
+      showToast('Node removed', 'info');
+    };
+    window.addEventListener('add-node-below', handleAddBelow);
+    window.addEventListener('remove-node', handleRemove);
+    return () => {
+      window.removeEventListener('add-node-below', handleAddBelow);
+      window.removeEventListener('remove-node', handleRemove);
+    };
+  }, [nodes, selectedNodeId, setNodes, setEdges, showToast]);
+
+  /* ── Handlers ── */
   const handleSave = async () => {
     if (!workflowId) { showToast('No workflow ID — import first', 'error'); return; }
     setSaving(true);
     try {
       const payload = prepareForSave(nodes, edges, workflowName);
       await workflowAPI.update(workflowId, payload);
-      showToast('✓ Workflow saved', 'success');
+      showToast('Workflow saved', 'success');
     } catch (err) {
       showToast(`Save failed: ${err.response?.data?.detail ?? err.message}`, 'error');
-    } finally {
-      setSaving(false);
+    } finally { setSaving(false); }
+  };
+
+  const handleDelete = async () => {
+    if (!workflowId || !window.confirm('Delete this workflow permanently?')) return;
+    try {
+      await workflowAPI.delete(workflowId);
+      sessionStorage.removeItem('currentWorkflowId');
+      showToast('Workflow deleted', 'success');
+      navigate('/');
+    } catch (err) {
+      showToast(`Delete failed: ${err.message}`, 'error');
     }
   };
 
@@ -104,173 +129,139 @@ const BuilderPage = () => {
     if (!workflowId) { showToast('Save first before executing', 'error'); return; }
     try {
       const res = await workflowAPI.execute(workflowId);
-      showToast(`✓ Workflow executed: ${res.data.status}`, res.data.status === 'success' ? 'success' : 'warning');
+      showToast(`Executed: ${res.data.status}`, res.data.status === 'success' ? 'success' : 'warning');
       setRefreshLogs(r => r + 1);
     } catch (err) {
       showToast(`Execution failed: ${err.response?.data?.detail ?? err.message}`, 'error');
     }
   };
 
-  const handleDelete = async () => {
-    if (!workflowId) return;
-    if (!confirm('Delete this workflow permanently?')) return;
-    try {
-      await workflowAPI.delete(workflowId);
-      showToast('Workflow deleted', 'info');
-      navigate('/');
-    } catch (err) {
-      showToast(`Delete failed: ${err.message}`, 'error');
-    }
-  };
-
   const handleActivate = async () => {
     if (!workflowId) return;
     try {
-      if (isActive) {
-        await workflowAPI.deactivate(workflowId);
-        setIsActive(false);
-        showToast('Workflow deactivated', 'info');
-      } else {
-        await workflowAPI.activate(workflowId);
-        setIsActive(true);
-        showToast('Workflow activated', 'success');
-      }
-    } catch (err) {
-      showToast(`Failed: ${err.message}`, 'error');
-    }
+      if (isActive) { await workflowAPI.deactivate(workflowId); setIsActive(false); showToast('Deactivated', 'info'); }
+      else          { await workflowAPI.activate(workflowId);   setIsActive(true);  showToast('Activated', 'success'); }
+    } catch {}
   };
 
-  // If no state, show empty view
-  if (!extracted) {
+  const handleCopyUrl = () => {
+    if (!workflowId) return;
+    navigator.clipboard.writeText(`${window.location.origin}/builder?id=${workflowId}`);
+    showToast('URL copied to clipboard', 'info');
+  };
+
+  const updateNodeConfig = (id, newConfig, newLabel) => {
+    setNodes(nds => nds.map(n => n.id === id ? { ...n, data: { ...n.data, config: newConfig, label: newLabel ?? n.data.label } } : n));
+  };
+
+  /* ── Palette drop onto canvas ── */
+  const onDrop = useCallback((event) => {
+    event.preventDefault();
+    const raw = event.dataTransfer.getData('application/quantixone-palette');
+    if (!raw) return;
+    const flowBounds = event.target.closest('.react-flow')?.getBoundingClientRect();
+    if (!flowBounds) return;
+    try {
+      const payload = JSON.parse(raw);
+      const position = {
+        x: event.clientX - flowBounds.left,
+        y: event.clientY - flowBounds.top,
+      };
+      const newId = `step_${Date.now()}`;
+      const typeMap = { trigger: 'triggerNode', action: 'actionNode', condition: 'conditionNode', delay: 'delayNode' };
+      const newNode = {
+        id: newId,
+        type: typeMap[payload.nodeKind] || 'actionNode',
+        position,
+        data: { ...payload, stepId: newId, config: { ...(payload.defaultConfig || {}) } },
+      };
+      setNodes(nds => nds.concat(newNode));
+      showToast(`Added ${payload.label}`, 'success');
+      setSelectedNodeId(newId);
+    } catch {}
+  }, [setNodes, showToast]);
+
+  const onDragOver = useCallback(e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }, []);
+
+  /* ── AddNodeModal handler ── */
+  const handleAddFromModal = (newNode, newEdge) => {
+    setNodes(nds => nds.concat(newNode));
+    setEdges(eds => eds.concat(newEdge));
+    showToast(`Added ${newNode.data.label}`, 'success');
+    setSelectedNodeId(newNode.id);
+  };
+
+  /* ── Empty state ── */
+  if (!extracted && !workflowId) {
     return (
-      <div style={{
-        height: '100vh', display: 'flex', flexDirection: 'column',
-        justifyContent: 'center', alignItems: 'center',
-        fontFamily: 'Inter, sans-serif', color: '#475569',
-      }}>
-        <div style={{ fontSize: 48, marginBottom: 16 }}>📋</div>
-        <h2 style={{ fontWeight: 600, marginBottom: 8 }}>No workflow loaded</h2>
-        <button
-          onClick={() => navigate('/')}
-          style={{
-            padding: '8px 20px', fontSize: 14, fontWeight: 500,
-            color: '#4f46e5', background: '#eef2ff',
-            border: '1px solid #c7d2fe', borderRadius: 8, cursor: 'pointer',
-          }}
-        >
-          ← Back to Upload
-        </button>
+      <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', color:'var(--text-muted)', fontFamily:'var(--font-body)' }}>
+        <div style={{ fontSize:42, marginBottom:16 }}>📋</div>
+        <h2 style={{ fontWeight:600, marginBottom:8, color:'var(--text-primary)' }}>No workflow loaded</h2>
+        <button className="btn btn-secondary" onClick={() => navigate('/')}>← Back to Home</button>
       </div>
     );
   }
 
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', fontFamily: 'Inter, sans-serif', overflow: 'hidden' }}>
-      {/* ── TOPBAR ───────────────────────────────────────────────────── */}
-      <div style={{
-        background: 'rgba(255,255,255,0.85)',
-        backdropFilter: 'blur(12px)',
-        borderBottom: '1px solid #e2e8f0',
-        padding: '10px 20px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        zIndex: 10,
-        flexShrink: 0,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button
-            onClick={() => navigate('/')}
-            style={{
-              background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 6,
-              padding: '5px 12px', fontSize: 13, cursor: 'pointer', color: '#475569',
-            }}
-          >
-            ← Back
-          </button>
+    <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+      {/* TOPBAR */}
+      <div className="topbar">
+        <div className="topbar-left">
           <input
+            className="workflow-name-input"
             value={workflowName}
-            onChange={(e) => setWorkflowName(e.target.value)}
-            style={{
-              background: 'transparent', border: 'none', fontSize: 16, fontWeight: 600,
-              color: '#0f172a', fontFamily: 'Outfit, sans-serif', outline: 'none',
-              borderBottom: '1px dashed transparent', width: 260,
-            }}
-            onFocus={(e) => { e.target.style.borderBottom = '1px dashed #a5b4fc'; }}
-            onBlur={(e) => { e.target.style.borderBottom = '1px dashed transparent'; }}
+            onChange={e => setWorkflowName(e.target.value)}
           />
-          <button
-            onClick={handleActivate}
-            style={{
-              fontSize: 11, fontWeight: 600,
-              padding: '3px 10px', borderRadius: 12, cursor: 'pointer',
-              border: 'none',
-              background: isActive ? 'rgba(22,163,74,0.12)' : 'rgba(148,163,184,0.15)',
-              color: isActive ? '#16a34a' : '#94a3b8',
-            }}
-          >
-            ● {isActive ? 'Active' : 'Inactive'}
+          <button className={`status-pill ${isActive ? 'active' : 'inactive'}`} onClick={handleActivate}>
+            <span className="status-dot" /> {isActive ? 'Active' : 'Inactive'}
           </button>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={handleSave} disabled={saving} className="action-btn primary" style={{ padding: '6px 14px', fontSize: 13 }}>
-            {saving ? '⏳ Saving…' : '💾 Save'}
+        <div className="topbar-right">
+          <button className="btn btn-ghost btn-sm" onClick={handleCopyUrl} title="Copy URL"><Copy size={14} /></button>
+          <button className="btn btn-secondary btn-sm" onClick={handleSave} disabled={saving}>
+            <Save size={14} /> {saving ? 'Saving…' : 'Save'}
           </button>
-          <button onClick={handleExecute} className="action-btn success" style={{ padding: '6px 14px', fontSize: 13 }}>
-            ▶ Execute
-          </button>
-          <button onClick={handleDelete} className="action-btn danger" style={{ padding: '6px 14px', fontSize: 13 }}>
-            🗑 Delete
-          </button>
+          <button className="btn btn-danger btn-sm btn-icon" onClick={handleDelete} title="Delete"><Trash2 size={14} /></button>
         </div>
       </div>
 
+      {/* BUILDER LAYOUT */}
+      <div className="builder-layout">
+        <LeftSidebar key={refreshLogs} showToast={showToast} workflowId={workflowId} />
 
-
-      {/* ── MAIN LAYOUT ──────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* Canvas — 65% */}
-        <div style={{ flex: '0 0 65%', position: 'relative' }}>
+        <div className="canvas-area" onDrop={onDrop} onDragOver={onDragOver}>
           <FlowCanvas
             nodes={nodes}
             edges={edges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
-            isLocked={isLocked}
-            setIsLocked={setIsLocked}
+            onNodeClick={(_, node) => setSelectedNodeId(node.id)}
+            onInit={instance => { rfInstance.current = instance; }}
           />
+          <button className="canvas-fab" onClick={handleExecute} title="Run Test">
+            <Play size={20} />
+          </button>
         </div>
 
-        {/* Sidebar — 35% */}
-        <div style={{
-          flex: '0 0 35%',
-          borderLeft: '1px solid #e2e8f0',
-          overflowY: 'auto',
-          padding: '12px',
-          background: '#fafbfc',
-        }}>
-          <ExecutionLogs
-            key={refreshLogs}
-            currentWorkflowId={workflowId}
-          />
-
-          <ContactsPanel showToast={showToast} />
-
-          <OpportunitiesPanel showToast={showToast} />
-
-          <ExecutePanel
-            workflowId={workflowId}
-            onExecuted={() => setRefreshLogs(r => r + 1)}
-            showToast={showToast}
-          />
-        </div>
+        <RightConfigPanel
+          selectedNode={selectedNode}
+          open={!!selectedNode}
+          onClose={() => setSelectedNodeId(null)}
+          onUpdate={updateNodeConfig}
+        />
       </div>
 
-      {/* Toast notifications */}
+      {addModal && (
+        <AddNodeModal
+          sourceNodeId={addModal.sourceNodeId}
+          sourcePosition={addModal.sourcePosition}
+          onAdd={handleAddFromModal}
+          onClose={() => setAddModal(null)}
+        />
+      )}
+
       <ToastContainer toasts={toasts} />
     </div>
   );
-};
-
-export default BuilderPage;
+}

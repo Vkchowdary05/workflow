@@ -33,6 +33,19 @@ async def get_pipelines():
     }
 
 
+@router.get("/stages")
+async def get_stages():
+    return {"stages": [
+        {"id": "new", "label": "New", "order": 1},
+        {"id": "qualified", "label": "Qualified", "order": 2},
+        {"id": "proposal", "label": "Proposal", "order": 3},
+        {"id": "cold", "label": "Cold", "order": 4},
+        {"id": "won", "label": "Won", "order": 5},
+        {"id": "lost", "label": "Lost", "order": 6},
+    ]}
+
+
+
 @router.post("", status_code=201)
 async def create_opportunity(payload: OpportunityCreate):
     """Create a new opportunity."""

@@ -83,3 +83,45 @@ async def get_message(message_id: str):
         raise HTTPException(status_code=404, detail="Message not found")
     msg["_id"] = str(msg["_id"])
     return msg
+
+
+MESSAGE_TEMPLATES = {
+    "email": [
+        {"template_id": "etpl_001", "name": "Welcome Email", "subject": "Welcome to {{company}}!", "body": "Hi {{contact_name}}, welcome aboard!"},
+        {"template_id": "etpl_002", "name": "Follow-up", "subject": "Checking in, {{contact_name}}", "body": "Just wanted to follow up on your recent inquiry."},
+        {"template_id": "etpl_003", "name": "Re-engagement", "subject": "We miss you!", "body": "Hi {{contact_name}}, it's been a while..."},
+    ],
+    "sms": [
+        {"template_id": "stpl_001", "name": "Welcome SMS", "body": "Hi {{contact_name}}, welcome! Reply STOP to opt out."},
+        {"template_id": "stpl_002", "name": "Follow-up SMS", "body": "Hi {{contact_name}}, saw you opened our email! Ready to chat?"},
+        {"template_id": "stpl_003", "name": "Reminder SMS", "body": "Reminder: {{event_name}} is coming up. Reply YES to confirm."},
+    ],
+    "whatsapp": [
+        {"template_id": "wtpl_001", "name": "Welcome WhatsApp", "body": "Hi {{contact_name}}! Welcome to {{company}}."},
+        {"template_id": "wtpl_002", "name": "Support Follow-up", "body": "Hi {{contact_name}}, how can we help you today?"},
+        {"template_id": "wtpl_003", "name": "Promo Message", "body": "Hi {{contact_name}}, we have a special offer for you!"},
+    ],
+}
+
+@router.get("/templates")
+async def get_message_templates(channel: str = ""):
+    if channel and channel in MESSAGE_TEMPLATES:
+        return {"templates": MESSAGE_TEMPLATES[channel]}
+    all_templates = []
+    for ch, templates in MESSAGE_TEMPLATES.items():
+        for t in templates:
+            all_templates.append({**t, "channel": ch})
+    return {"templates": all_templates}
+
+@router.get("")
+async def list_messages(channel: str = "", limit: int = 50, offset: int = 0):
+    db = get_database()
+    query = {}
+    if channel:
+        query["channel"] = channel
+    cursor = db["messages"].find(query).skip(offset).limit(limit)
+    messages = await cursor.to_list(length=limit)
+    for m in messages:
+        m["_id"] = str(m["_id"])
+    return messages
+

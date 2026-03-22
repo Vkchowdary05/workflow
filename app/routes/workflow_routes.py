@@ -112,3 +112,61 @@ async def deactivate_workflow(workflow_id: str):
     if not updated:
         raise HTTPException(status_code=404, detail="Workflow not found")
     return {"workflow_id": workflow_id, "status": "inactive"}
+
+
+@router.post("/{workflow_id}/duplicate", status_code=201)
+async def duplicate_workflow(workflow_id: str):
+    existing = await workflow_repo.get_by_id(workflow_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    new_data = {
+        "name": f"Copy of {existing.get('name', 'Workflow')}",
+        "description": existing.get("description", ""),
+        "trigger": existing.get("trigger", {}),
+        "steps": existing.get("steps", []),
+        "tags": existing.get("tags", []),
+        "settings": existing.get("settings", {}),
+        "status": "inactive",
+    }
+    result = await workflow_service.create_workflow(new_data)
+    return {**result, "duplicated": True}
+
+@router.get("/{workflow_id}/export")
+async def export_workflow(workflow_id: str):
+    from datetime import datetime, timezone
+    wf = await workflow_repo.get_by_id(workflow_id)
+    if not wf:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    return {
+        "$schema": "https://quantixone.com/schemas/workflow/v1.0.0",
+        "format": "quantixone-workflow",
+        "format_version": "1.0.0",
+        "export_metadata": {
+            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "tool": "quantixone-workflow-builder"
+        },
+        "workflow": {
+            "meta": {
+                "workflow_id": str(wf["_id"]),
+                "name": wf.get("name"),
+                "description": wf.get("description"),
+                "tags": wf.get("tags", []),
+            },
+            "settings": wf.get("settings", {}),
+            "trigger": wf.get("trigger", {}),
+            "steps": wf.get("steps", []),
+        }
+    }
+
+@router.post("/{workflow_id}/validate")
+async def validate_workflow_endpoint(workflow_id: str):
+    wf = await workflow_repo.get_by_id(workflow_id)
+    if not wf:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    try:
+        from app.services.validation_service import validate_workflow
+        validate_workflow(wf.get("trigger", {}), wf.get("steps", []))
+        return {"valid": True, "errors": []}
+    except HTTPException as e:
+        return {"valid": False, "errors": [e.detail]}
+
