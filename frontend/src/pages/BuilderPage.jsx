@@ -344,20 +344,22 @@ export default function BuilderPage() {
     try {
       const payload = JSON.parse(raw);
 
-      // Get the ReactFlow viewport element for accurate bounds
-      const reactFlowBounds = canvasRef.current?.getBoundingClientRect();
-      if (!reactFlowBounds) return;
-
-      // Calculate position relative to ReactFlow canvas
-      const clientPosition = {
-        x: event.clientX - reactFlowBounds.left,
-        y: event.clientY - reactFlowBounds.top,
-      };
-
-      // Project from screen coordinates to flow coordinates (accounts for pan/zoom)
-      let flowPosition = clientPosition;
-      if (rfInstance.current?.project) {
-        flowPosition = rfInstance.current.project(clientPosition);
+      let flowPosition;
+      if (rfInstance.current?.screenToFlowPosition) {
+        flowPosition = rfInstance.current.screenToFlowPosition({
+          x: event.clientX,
+          y: event.clientY,
+        });
+      } else {
+        const reactFlowBounds = canvasRef.current?.getBoundingClientRect();
+        if (!reactFlowBounds) return;
+        const clientPosition = {
+          x: event.clientX - reactFlowBounds.left,
+          y: event.clientY - reactFlowBounds.top,
+        };
+        flowPosition = rfInstance.current?.project
+          ? rfInstance.current.project(clientPosition)
+          : clientPosition;
       }
 
       const newId = `step_${Date.now()}`;
@@ -399,15 +401,21 @@ export default function BuilderPage() {
           const tailNode = tailNodes[0];
           // Don't auto-connect if the tail node is a condition (it has two branches)
           if (tailNode.data?.nodeKind !== 'condition') {
+            
+            let sHandle = 'success';
+            if (tailNode.data?.nodeKind === 'delay') sHandle = 'complete';
+            if (tailNode.data?.nodeKind === 'trigger' || tailNode.type === 'triggerNode' || tailNode.id === 'trigger') sHandle = null;
+
             const autoEdge = {
               id:           `e-${tailNode.id}-${newId}-auto`,
               source:       tailNode.id,
               target:       newId,
-              sourceHandle: tailNode.data?.nodeKind === 'delay' ? 'complete' : 'success',
               type:         'customEdge',
               style:        { stroke: '#c5cdd6', strokeWidth: 1.5, strokeDasharray: '6 4' },
               data:         { source: tailNode.id, target: newId },
             };
+            if (sHandle) autoEdge.sourceHandle = sHandle;
+            
             return [...eds, autoEdge];
           }
         }
