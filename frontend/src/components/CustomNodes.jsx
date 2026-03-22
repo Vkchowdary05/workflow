@@ -35,120 +35,91 @@ function getSubtitle(data) {
   }
 }
 
-function AddBelowButton({ stepId }) {
+const NodeCard = ({ data, color, children, handles }) => {
   return (
-    <div
-      style={{
-        position:  'absolute',
-        bottom:    -13,
-        left:      '50%',
-        transform: 'translateX(-50%)',
-        zIndex:    50,
-      }}
-      onMouseDown={e => e.stopPropagation()}
-      onClick={(e) => {
-        e.stopPropagation();
-        window.dispatchEvent(new CustomEvent('add-node-below', {
-          detail: { sourceNodeId: stepId },
-        }));
-      }}
-    >
-      <div className="add-edge-btn">+</div>
-    </div>
-  );
-}
-
-function NodeCard({ data, color, children, handles, showAddBtn = true }) {
-  const dot = color || getNodeColor(data);
-  const execClass = data.isAnimating
-    ? 'exec-running'
-    : data.executionStatus === 'success'
-      ? 'exec-success'
-      : data.executionStatus === 'failed'
-        ? 'exec-failed'
-        : '';
-
-  return (
-    <div className={`wf-node ${execClass}`} style={{ borderTopColor: dot }}>
-      <div className="wf-node-header">
-        <div className="wf-node-dot" style={{ background: dot }} />
-        <div className="wf-node-info">
-          <div className="wf-node-title">{data.label}</div>
-          <div className="wf-node-subtitle">{getSubtitle(data)}</div>
+    <div className={`node-card`} style={{ '--node-color': color }}>
+      {handles?.target && <Handle type="target" position={Position.Top} id={handles.target} className="node-handle" />}
+      
+      <div className="node-icon-header">
+        <div className="node-icon">
+          {data.icon === 'Zap' && <Zap size={16} />}
+          {data.icon === 'Mail' && <Mail size={16} />}
+          {data.icon === 'MessageSquare' && <MessageSquare size={16} />}
+          {data.icon === 'Phone' && <Phone size={16} />}
+          {data.icon === 'Tag' && <Tag size={16} />}
+          {data.icon === 'User' && <User size={16} />}
+          {data.icon === 'Briefcase' && <Briefcase size={16} />}
+          {data.icon === 'GitBranch' && <GitBranch size={16} />}
+          {data.icon === 'Clock' && <Clock size={16} />}
         </div>
-        <div className="wf-node-actions">
-          <button
-            className="wf-node-btn"
-            title="Info"
-            onClick={e => e.stopPropagation()}
-          >ℹ</button>
-          <button
-            className="wf-node-btn"
-            title="Remove node"
-            style={{ color: '#e74c3c' }}
-            onClick={(e) => {
-              e.stopPropagation();
-              window.dispatchEvent(new CustomEvent('remove-node', {
-                detail: { nodeId: data.stepId },
-              }));
-            }}
-          >✕</button>
+        <div style={{ flex: 1 }}>
+          <div className="node-title">{data.label}</div>
+          <div className="node-subtitle">{data.nodeKind}</div>
         </div>
       </div>
 
-      {children}
-      {handles}
-      {showAddBtn && <AddBelowButton stepId={data.stepId} />}
+      <div className="node-content">{children}</div>
+
+      {handles?.source && (
+        <Handle type="source" position={Position.Bottom} id={handles.source} className="node-handle" />
+      )}
     </div>
+  );
+};
+
+/* Trigger Node */
+export function TriggerNode({ data, selected }) {
+  return (
+    <NodeCard data={data} color="var(--trigger-color)" handles={{ source: 'out' }}>
+      <div className="wf-node-desc">Workflow execution starts from this node</div>
+      <div className="wf-node-handles">
+        {['Incoming SMS', 'Incoming Call', 'API Request'].map(h => (
+          <span key={h} className="wf-handle-label">
+            <span className="wf-handle-square" />
+            {h}
+          </span>
+        ))}
+      </div>
+    </NodeCard>
   );
 }
 
-/* Trigger Node */
-export const TriggerNode = ({ data }) => (
-  <NodeCard data={data} color={NODE_COLORS.trigger} showAddBtn={false}>
-    <Handle type="source" position={Position.Bottom} />
-    <div className="wf-node-desc">Workflow execution starts from this node</div>
-    <div className="wf-node-handles">
-      {['Incoming SMS', 'Incoming Call', 'API Request'].map(h => (
-        <span key={h} className="wf-handle-label">
-          <span className="wf-handle-square" />
-          {h}
-        </span>
-      ))}
-    </div>
-  </NodeCard>
-);
-
 /* Action Node */
-export const ActionNode = ({ data }) => (
-  <NodeCard data={data}>
-    <Handle type="target" position={Position.Top} />
-    <div className="wf-node-handles">
-      <span className="wf-handle-label">
-        <span className="wf-handle-square" style={{ borderColor: '#27ae60' }} />
-        Completed
-      </span>
-      <span className="wf-handle-label">
-        <span className="wf-handle-square" style={{ borderColor: '#e74c3c' }} />
-        Failed
-      </span>
-    </div>
-    <Handle type="source" position={Position.Bottom} id="success"
-      style={{ left: '30%', background: '#27ae60', width: 8, height: 8, borderRadius: 2 }} />
-    <Handle type="source" position={Position.Bottom} id="failure"
-      style={{ left: '70%', background: '#e74c3c', width: 8, height: 8, borderRadius: 2 }} />
-  </NodeCard>
-);
+export function ActionNode({ data, selected }) {
+  return (
+    <NodeCard 
+      data={data} 
+      color={getNodeColor(data)}
+      handles={{ target: 'in', source: 'success' }}
+    >
+      <div className="wf-node-handles">
+        <span className="wf-handle-label">
+          <span className="wf-handle-square" style={{ borderColor: '#27ae60' }} />
+          Completed
+        </span>
+        <span className="wf-handle-label">
+          <span className="wf-handle-square" style={{ borderColor: '#e74c3c' }} />
+          Failed
+        </span>
+      </div>
+      <Handle type="source" position={Position.Bottom} id="failure"
+        style={{ left: '70%', background: '#e74c3c', width: 8, height: 8, borderRadius: 2 }} />
+    </NodeCard>
+  );
+}
 
 /* Condition Node */
-export const ConditionNode = ({ data }) => {
+export function ConditionNode({ data, selected }) {
   const rules = data.config?.rules || [];
   const summary = rules.length
     ? `If "${rules[0].field}" ${rules[0].operator} ${JSON.stringify(rules[0].value)}`
     : 'No rules defined';
   return (
-    <NodeCard data={data} color={NODE_COLORS.condition}>
-      <Handle type="target" position={Position.Top} />
+    <NodeCard 
+      data={data} 
+      color="var(--condition-color)"
+      handles={{ target: 'in' }}
+    >
       <div className="wf-node-desc">{summary}</div>
       <div className="wf-node-handles">
         <span className="wf-handle-label">
@@ -164,14 +135,17 @@ export const ConditionNode = ({ data }) => {
         style={{ left: '70%', background: '#e74c3c', width: 8, height: 8, borderRadius: 2 }} />
     </NodeCard>
   );
-};
+}
 
 /* Delay Node */
-export const DelayNode = ({ data }) => {
+export function DelayNode({ data, selected }) {
   const c = data.config || {};
   return (
-    <NodeCard data={data} color={NODE_COLORS.delay}>
-      <Handle type="target" position={Position.Top} />
+    <NodeCard 
+      data={data} 
+      color="var(--delay-color)"
+      handles={{ target: 'in', source: 'complete' }}
+    >
       <div className="wf-node-desc">Wait {c.duration || '?'} {c.unit || 'seconds'}</div>
       <div className="wf-node-handles">
         <span className="wf-handle-label">

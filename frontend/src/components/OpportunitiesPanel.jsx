@@ -25,6 +25,21 @@ const OpportunitiesPanel = ({ showToast, compact }) => {
 
   useEffect(() => { fetchAll(); }, []);
 
+  const [highlightId, setHighlightId] = useState(null);
+  useEffect(() => {
+    const handleExecuted = (e) => {
+      const { entityType, entity } = e.detail;
+      if (entityType === 'opportunity' && entity && entity.opportunity_id) {
+        fetchAll().then(() => {
+          setHighlightId(entity.opportunity_id);
+          setTimeout(() => setHighlightId(null), 3000);
+        });
+      }
+    };
+    window.addEventListener('workflow-executed', handleExecuted);
+    return () => window.removeEventListener('workflow-executed', handleExecuted);
+  }, []);
+
   const getLinkedContact = (opp) =>
     contacts.find(c => (c.contact_id || c.id || c._id) === opp.contact_id) ?? null;
 
@@ -182,7 +197,7 @@ const OpportunitiesPanel = ({ showToast, compact }) => {
           return (
             <div
               key={oid}
-              className={`opp-card ${cardDragOver === oid ? 'drop-active-opp' : ''}`}
+              className={`opp-card ${cardDragOver === oid ? 'drop-active-opp' : ''} ${highlightId === oid ? 'highlight-new' : ''}`}
               onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setCardOver(oid); }}
               onDragLeave={() => setCardOver(null)}
               onDrop={(e) => handleCardDrop(e, opp)}

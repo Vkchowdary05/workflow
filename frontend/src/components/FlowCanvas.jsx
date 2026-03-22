@@ -2,6 +2,9 @@ import React from 'react';
 import ReactFlow, { Background, Controls, MiniMap } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { nodeTypes } from './CustomNodes';
+import CustomEdge from './CustomEdge';
+
+const edgeTypes = { customEdge: CustomEdge };
 
 export default function FlowCanvas({ nodes, edges, onNodesChange, onEdgesChange, onConnect, onNodeClick, onInit }) {
   return (
@@ -15,10 +18,11 @@ export default function FlowCanvas({ nodes, edges, onNodesChange, onEdgesChange,
         onNodeClick={onNodeClick}
         onInit={onInit}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         fitView
         defaultEdgeOptions={{
-          type: 'smoothstep',
-          style: { stroke: '#c5cdd6', strokeWidth: 1.5 },
+          type: 'customEdge',
+          style: { stroke: '#c5cdd6', strokeWidth: 1.5, strokeDasharray: '6 4' },
         }}
         attributionPosition="bottom-right"
       >

@@ -29,17 +29,93 @@ async def execute_action(action_type: str, config: dict) -> dict:
 # ── Individual action handlers ──
 
 async def _handle_send_email(config: dict) -> dict:
-    to = config.get("to", "unknown")
+    to = config.get("to") or config.get("contact_email", "unknown")
     subject = config.get("subject", "(no subject)")
     logger.info(f"📧 Email sent to {to} — Subject: {subject}")
+    try:
+        from app.core.database import get_database
+        import uuid
+        from datetime import datetime, timezone
+        db = get_database()
+        await db["messages"].insert_one({
+            "message_id": str(uuid.uuid4()),
+            "channel": "email",
+            "to": to,
+            "subject": subject,
+            "body": config.get("body", ""),
+            "status": "sent",
+            "sent_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(timezone.utc),
+        })
+    except Exception:
+        pass
     return {"status": "success", "message": f"Email sent to {to}"}
 
 
 async def _handle_send_sms(config: dict) -> dict:
-    to = config.get("to", "unknown")
+    to = config.get("to") or config.get("contact_phone", "unknown")
     body = config.get("body", "")
     logger.info(f"📱 SMS sent to {to} — Body: {body[:50]}")
+    try:
+        from app.core.database import get_database
+        import uuid
+        from datetime import datetime, timezone
+        db = get_database()
+        await db["messages"].insert_one({
+            "message_id": str(uuid.uuid4()),
+            "channel": "sms",
+            "to": to,
+            "body": body,
+            "status": "sent",
+            "sent_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(timezone.utc),
+        })
+    except Exception:
+        pass
     return {"status": "success", "message": f"SMS sent to {to}"}
+
+
+async def _handle_send_whatsapp(config: dict) -> dict:
+    to = config.get("to") or config.get("contact_phone", "unknown")
+    body = config.get("body", "")
+    logger.info(f"🟢 WhatsApp sent to {to} — Body: {body[:50]}")
+    try:
+        from app.core.database import get_database
+        import uuid
+        from datetime import datetime, timezone
+        db = get_database()
+        await db["messages"].insert_one({
+            "message_id": str(uuid.uuid4()),
+            "channel": "whatsapp",
+            "to": to,
+            "body": body,
+            "status": "sent",
+            "sent_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(timezone.utc),
+        })
+    except Exception:
+        pass
+    return {"status": "success", "message": f"WhatsApp sent to {to}"}
+
+async def _handle_create_opportunity(config: dict) -> dict:
+    """Create an opportunity in the DB."""
+    contact_id = config.get("contact_id")
+    name       = config.get("name", "New Opportunity")
+    stage      = config.get("stage", "new")
+    logger.info(f"💼 Creating opportunity: {name} for contact: {contact_id}")
+    
+    if contact_id:
+        try:
+            opp = await opportunity_repo.create({
+                "name":       name,
+                "contact_id": contact_id,
+                "stage":      stage,
+            })
+            return {"status": "success", "message": f"Opportunity '{name}' created (ID: {str(opp['_id'])})"}
+        except Exception as e:
+            return {"status": "failed", "message": f"Failed to create opportunity: {str(e)}"}
+            
+    return {"status": "success", "message": f"Opportunity '{name}' simulated (no contact_id)"}
 
 
 async def _handle_move_pipeline(config: dict) -> dict:
@@ -121,6 +197,8 @@ async def _handle_update_contact(config: dict) -> dict:
 _ACTION_HANDLERS = {
     "send_email": _handle_send_email,
     "send_sms": _handle_send_sms,
+    "send_whatsapp": _handle_send_whatsapp,
+    "create_opportunity": _handle_create_opportunity,
     "move_pipeline": _handle_move_pipeline,
     "add_tag": _handle_add_tag,
     "update_contact": _handle_update_contact,

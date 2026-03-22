@@ -24,6 +24,21 @@ const ContactsPanel = ({ showToast, compact }) => {
 
   useEffect(() => { fetchContacts(); }, []);
 
+  const [highlightId, setHighlightId] = useState(null);
+  useEffect(() => {
+    const handleExecuted = (e) => {
+      const { entityType, entity } = e.detail;
+      if (entityType === 'contact' && entity && entity.contact_id) {
+        fetchContacts().then(() => {
+          setHighlightId(entity.contact_id);
+          setTimeout(() => setHighlightId(null), 3000);
+        });
+      }
+    };
+    window.addEventListener('workflow-executed', handleExecuted);
+    return () => window.removeEventListener('workflow-executed', handleExecuted);
+  }, []);
+
   // ── Drop handlers ──────────────────────────────────────────────
   const handlePanelDrop = async (e) => {
     e.preventDefault();
@@ -180,7 +195,7 @@ const ContactsPanel = ({ showToast, compact }) => {
           return (
             <div
               key={cid}
-              className={`contact-card ${cardDragOver === cid ? 'drop-active-contact' : ''}`}
+              className={`contact-card ${cardDragOver === cid ? 'drop-active-contact' : ''} ${highlightId === cid ? 'highlight-new' : ''}`}
               onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setCardOver(cid); }}
               onDragLeave={() => setCardOver(null)}
               onDrop={(e) => handleCardDrop(e, contact)}

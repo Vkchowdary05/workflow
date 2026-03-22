@@ -15,6 +15,7 @@ export default function BuilderPage() {
   const navigate = useNavigate();
   const { rawJson, extracted } = location.state ?? {};
   const rfInstance = useRef(null);
+  const canvasRef = useRef(null);
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -29,7 +30,12 @@ export default function BuilderPage() {
 
   const selectedNode = nodes.find(n => n.id === selectedNodeId) || null;
 
-  const onConnect = useCallback(p => setEdges(eds => addEdge({ ...p, type:'smoothstep', style:{stroke:'#c5cdd6',strokeWidth:1.5} }, eds)), [setEdges]);
+  const onConnect = useCallback(p => setEdges(eds => addEdge({
+    ...p,
+    type: 'customEdge',
+    style: { stroke: '#c5cdd6', strokeWidth: 1.5, strokeDasharray: '6 4' },
+    data: { source: p.source, target: p.target },
+  }, eds)), [setEdges]);
 
   const showToast = useCallback((message, type = 'info') => {
     const id = Date.now() + Math.random();
@@ -77,12 +83,14 @@ export default function BuilderPage() {
 
   /* ── Event listeners ── */
   useEffect(() => {
-    const handleAddBelow = (e) => {
-      const { sourceNodeId } = e.detail;
-      const sourceNode = nodes.find(n => n.data.stepId === sourceNodeId || n.id === sourceNodeId);
+    const handleAddOnEdge = (e) => {
+      const { edgeId, sourceNodeId, targetNodeId, insertPosition } = e.detail;
+      const sourceNode = nodes.find(n => n.data?.stepId === sourceNodeId || n.id === sourceNodeId);
       setAddModal({
-        sourceNodeId: sourceNode?.id || sourceNodeId,
-        sourcePosition: sourceNode?.position || { x: 300, y: 200 },
+        sourceNodeId,
+        targetNodeId,
+        edgeId,
+        insertPosition: insertPosition || sourceNode?.position || { x: 300, y: 300 },
       });
     };
     const handleRemove = (e) => {
@@ -92,22 +100,31 @@ export default function BuilderPage() {
       if (selectedNodeId === nodeId) setSelectedNodeId(null);
       showToast('Node removed', 'info');
     };
-    window.addEventListener('add-node-below', handleAddBelow);
+    window.addEventListener('add-node-on-edge', handleAddOnEdge);
     window.addEventListener('remove-node', handleRemove);
     return () => {
-      window.removeEventListener('add-node-below', handleAddBelow);
+      window.removeEventListener('add-node-on-edge', handleAddOnEdge);
       window.removeEventListener('remove-node', handleRemove);
     };
   }, [nodes, selectedNodeId, setNodes, setEdges, showToast]);
 
   /* ── Handlers ── */
   const handleSave = async () => {
-    if (!workflowId) { showToast('No workflow ID — import first', 'error'); return; }
     setSaving(true);
     try {
       const payload = prepareForSave(nodes, edges, workflowName);
-      await workflowAPI.update(workflowId, payload);
-      showToast('Workflow saved', 'success');
+      if (workflowId) {
+        await workflowAPI.update(workflowId, payload);
+        showToast('Workflow saved', 'success');
+      } else {
+        const res = await workflowAPI.create(payload);
+        const newId = res.data?.workflow_id || res.data?.id || res.data?._id;
+        if (newId) {
+          setWorkflowId(newId);
+          sessionStorage.setItem('currentWorkflowId', newId);
+        }
+        showToast('Workflow created and saved', 'success');
+      }
     } catch (err) {
       showToast(`Save failed: ${err.response?.data?.detail ?? err.message}`, 'error');
     } finally { setSaving(false); }
@@ -125,12 +142,118 @@ export default function BuilderPage() {
     }
   };
 
+  const animateExecution = useCallback((stepLogs) => {
+    if (!stepLogs || stepLogs.length === 0) return;
+
+    setNodes(nds => nds.map(n => ({
+      ...n, data: { ...n.data, executionStatus: null, isAnimating: false }
+    })));
+    setEdges(eds => eds.map(e => ({
+      ...e,
+      style: { stroke: '#c5cdd6', strokeWidth: 1.5, strokeDasharray: '6 4' },
+      animated: false,
+      data: { ...e.data, traversed: false }
+    })));
+
+    function _getUsedHandle(log, status) {
+      if (!log) return 'success';
+      if (log.step_type === 'condition') return status === 'success' ? 'true' : 'false';
+      if (log.step_type === 'delay') return 'complete';
+      return status === 'success' ? 'success' : 'failure';
+    }
+
+    const logMap = {};
+    stepLogs.forEach(log => { logMap[log.step_id] = log; });
+    const traversedNodeIds = stepLogs.map(log => log.step_id);
+
+    traversedNodeIds.forEach((nodeId, index) => {
+      const log = logMap[nodeId];
+      setTimeout(() => {
+        setNodes(nds => nds.map(n => {
+          const match = n.id === nodeId || n.data?.stepId === nodeId;
+          return match ? { ...n, data: { ...n.data, executionStatus: log.status, isAnimating: true } } : n;
+        }));
+
+        if (index > 0) {
+          const prevNodeId = traversedNodeIds[index - 1];
+          const prevLog = logMap[prevNodeId];
+          const handle = _getUsedHandle(prevLog, prevLog?.status);
+          
+          setEdges(eds => eds.map(e => {
+            const edgeMatches = e.source === prevNodeId && e.target === nodeId;
+            if (!edgeMatches) return e;
+            return {
+              ...e, animated: true,
+              style: { stroke: log.status === 'failed' ? '#e74c3c' : '#27ae60', strokeWidth: 2.5, strokeDasharray: 'none' },
+              data: { ...e.data, traversed: true }
+            };
+          }));
+        }
+
+        setTimeout(() => {
+          setNodes(nds => nds.map(n => {
+            const match = n.id === nodeId || n.data?.stepId === nodeId;
+            return match ? { ...n, data: { ...n.data, isAnimating: false } } : n;
+          }));
+        }, 800);
+      }, index * 700);
+    });
+
+    setTimeout(() => {
+      setEdges(eds => eds.map(e => e.data?.traversed ? { ...e, animated: false } : e));
+    }, traversedNodeIds.length * 700 + 1000);
+
+    setTimeout(() => {
+      setNodes(nds => nds.map(n => ({ ...n, data: { ...n.data, executionStatus: null, isAnimating: false } })));
+      setEdges(eds => eds.map(e => ({ ...e, style: { stroke: '#c5cdd6', strokeWidth: 1.5, strokeDasharray: '6 4' }, animated: false, data: { ...e.data, traversed: false } })));
+    }, traversedNodeIds.length * 700 + 6000);
+  }, [setNodes, setEdges]);
+
   const handleExecute = async () => {
-    if (!workflowId) { showToast('Save first before executing', 'error'); return; }
     try {
-      const res = await workflowAPI.execute(workflowId);
-      showToast(`Executed: ${res.data.status}`, res.data.status === 'success' ? 'success' : 'warning');
+      const payload = prepareForSave(nodes, edges, workflowName);
+      let currentId = workflowId;
+      
+      if (currentId) {
+        await workflowAPI.update(currentId, payload);
+      } else {
+        const res = await workflowAPI.create(payload);
+        currentId = res.data?.workflow_id || res.data?.id || res.data?._id;
+        if (currentId) {
+          setWorkflowId(currentId);
+          sessionStorage.setItem('currentWorkflowId', currentId);
+        }
+      }
+      
+      if (!currentId) {
+        showToast('Save first before executing', 'error');
+        return;
+      }
+      
+      const res = await workflowAPI.execute(currentId);
+      const exec = res.data;
+      
+      let msg = exec.status === 'success' ? `✓ Workflow executed successfully` : `✗ Execution failed`;
+      let entityType = null;
+      if (exec.created_entity) {
+        if (exec.created_entity.contact_id) {
+            msg = `New contact ${exec.created_entity.contact_name} created & workflow ran successfully`;
+            entityType = 'contact';
+        } else if (exec.created_entity.opportunity_id) {
+            msg = `New deal ${exec.created_entity.opportunity_name} created & workflow ran successfully`;
+            entityType = 'opportunity';
+        }
+      } else {
+        msg += ` — ${exec.step_logs?.length || 0} steps`;
+      }
+      
+      showToast(msg, exec.status === 'success' ? 'success' : 'error');
+      if (exec.step_logs?.length) animateExecution(exec.step_logs);
       setRefreshLogs(r => r + 1);
+      
+      window.dispatchEvent(new CustomEvent('workflow-executed', {
+        detail: { executionId: exec.execution_id, status: exec.status, entityType, entity: exec.created_entity }
+      }));
     } catch (err) {
       showToast(`Execution failed: ${err.response?.data?.detail ?? err.message}`, 'error');
     }
@@ -159,14 +282,17 @@ export default function BuilderPage() {
     event.preventDefault();
     const raw = event.dataTransfer.getData('application/quantixone-palette');
     if (!raw) return;
-    const flowBounds = event.target.closest('.react-flow')?.getBoundingClientRect();
+    const flowBounds = canvasRef.current?.getBoundingClientRect();
     if (!flowBounds) return;
     try {
       const payload = JSON.parse(raw);
-      const position = {
+      let position = {
         x: event.clientX - flowBounds.left,
         y: event.clientY - flowBounds.top,
       };
+      if (rfInstance.current?.project) {
+        position = rfInstance.current.project(position);
+      }
       const newId = `step_${Date.now()}`;
       const typeMap = { trigger: 'triggerNode', action: 'actionNode', condition: 'conditionNode', delay: 'delayNode' };
       const newNode = {
@@ -176,19 +302,40 @@ export default function BuilderPage() {
         data: { ...payload, stepId: newId, config: { ...(payload.defaultConfig || {}) } },
       };
       setNodes(nds => nds.concat(newNode));
-      showToast(`Added ${payload.label}`, 'success');
+      showToast(`Added: ${payload.label}`, 'success');
       setSelectedNodeId(newId);
-    } catch {}
-  }, [setNodes, showToast]);
+    } catch (err) {
+      console.error('Drop parse error:', err);
+    }
+  }, [setNodes, showToast, rfInstance]);
 
   const onDragOver = useCallback(e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }, []);
 
   /* ── AddNodeModal handler ── */
   const handleAddFromModal = (newNode, newEdge) => {
     setNodes(nds => nds.concat(newNode));
-    setEdges(eds => eds.concat(newEdge));
-    showToast(`Added ${newNode.data.label}`, 'success');
+
+    if (addModal?.edgeId && addModal?.targetNodeId) {
+      setEdges(eds => {
+        const withoutOld = eds.filter(e => e.id !== addModal.edgeId);
+        const edgeToTarget = {
+          id:     `e-${newNode.id}-${addModal.targetNodeId}`,
+          source: newNode.id,
+          target: addModal.targetNodeId,
+          type:   'customEdge',
+          sourceHandle: 'success',
+          style:  { stroke: '#c5cdd6', strokeWidth: 1.5, strokeDasharray: '6 4' },
+          data:   { source: newNode.id, target: addModal.targetNodeId },
+        };
+        return [...withoutOld, { ...newEdge, type: 'customEdge', data: { source: newEdge.source, target: newNode.id } }, edgeToTarget];
+      });
+    } else {
+      setEdges(eds => eds.concat({ ...newEdge, type: 'customEdge', data: { source: newEdge.source, target: newEdge.target } }));
+    }
+
+    showToast(`Added: ${newNode.data.label}`, 'success');
     setSelectedNodeId(newNode.id);
+    setAddModal(null);
   };
 
   /* ── Empty state ── */
@@ -229,7 +376,7 @@ export default function BuilderPage() {
       <div className="builder-layout">
         <LeftSidebar key={refreshLogs} showToast={showToast} workflowId={workflowId} />
 
-        <div className="canvas-area" onDrop={onDrop} onDragOver={onDragOver}>
+        <div className="canvas-area" ref={canvasRef} onDrop={onDrop} onDragOver={onDragOver}>
           <FlowCanvas
             nodes={nodes}
             edges={edges}
@@ -239,8 +386,8 @@ export default function BuilderPage() {
             onNodeClick={(_, node) => setSelectedNodeId(node.id)}
             onInit={instance => { rfInstance.current = instance; }}
           />
-          <button className="canvas-fab" onClick={handleExecute} title="Run Test">
-            <Play size={20} />
+          <button className="canvas-fab" onClick={handleExecute} title="Run Test" style={{ display: 'flex', alignItems: 'center', gap: 6, width: 'auto', padding: '0 16px', borderRadius: 24 }}>
+            <Play size={16} /> <span style={{ fontSize: 13, fontWeight: 600 }}>Run Test</span>
           </button>
         </div>
 
@@ -255,7 +402,7 @@ export default function BuilderPage() {
       {addModal && (
         <AddNodeModal
           sourceNodeId={addModal.sourceNodeId}
-          sourcePosition={addModal.sourcePosition}
+          sourcePosition={addModal.insertPosition}
           onAdd={handleAddFromModal}
           onClose={() => setAddModal(null)}
         />

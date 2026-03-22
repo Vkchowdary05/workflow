@@ -169,34 +169,36 @@ export function parseWorkflowToReactFlow(extracted) {
       });
 
       // ── Edges from this step ──────────────────────────────────────
+      const EDGE_STYLE = {
+        type: 'customEdge',
+        style: { stroke: '#c5cdd6', strokeWidth: 1.5, strokeDasharray: '6 4' },
+        animated: false,
+      };
+
       if (step.on_success) addEdge({
         id: `e-${step.id}-success`, source: step.id, target: step.on_success,
-        sourceHandle: 'success', type: 'smoothstep',
-        label: '✓', style: { stroke: '#16a34a', strokeWidth: 1.5 },
-        labelStyle: { fill: '#16a34a', fontSize: 11 },
+        sourceHandle: 'success', data: { source: step.id, target: step.on_success },
+        ...EDGE_STYLE,
       });
       if (step.on_failure) addEdge({
         id: `e-${step.id}-failure`, source: step.id, target: step.on_failure,
-        sourceHandle: 'failure', type: 'smoothstep',
-        label: '✗', style: { stroke: '#dc2626', strokeWidth: 1.5 },
-        labelStyle: { fill: '#dc2626', fontSize: 11 },
+        sourceHandle: 'failure', data: { source: step.id, target: step.on_failure },
+        ...EDGE_STYLE,
       });
       if (step.on_complete) addEdge({
         id: `e-${step.id}-complete`, source: step.id, target: step.on_complete,
-        sourceHandle: 'complete', type: 'smoothstep',
-        style: { stroke: '#6366f1', strokeWidth: 1.5 },
+        sourceHandle: 'complete', data: { source: step.id, target: step.on_complete },
+        ...EDGE_STYLE,
       });
       if (step.branches?.true) addEdge({
         id: `e-${step.id}-true`, source: step.id, target: step.branches.true,
-        sourceHandle: 'true', type: 'smoothstep',
-        label: 'True', style: { stroke: '#16a34a', strokeWidth: 1.5 },
-        labelStyle: { fill: '#16a34a', fontSize: 11 },
+        sourceHandle: 'true', data: { source: step.id, target: step.branches.true },
+        ...EDGE_STYLE,
       });
       if (step.branches?.false) addEdge({
         id: `e-${step.id}-false`, source: step.id, target: step.branches.false,
-        sourceHandle: 'false', type: 'smoothstep',
-        label: 'False', style: { stroke: '#dc2626', strokeWidth: 1.5 },
-        labelStyle: { fill: '#dc2626', fontSize: 11 },
+        sourceHandle: 'false', data: { source: step.id, target: step.branches.false },
+        ...EDGE_STYLE,
       });
     });
 
@@ -207,8 +209,9 @@ export function parseWorkflowToReactFlow(extracted) {
       if (firstStep) addEdge({
         id: `e-trigger-${firstStep.id}`,
         source: 'trigger', target: firstStep.id,
-        type: 'smoothstep', animated: false,
-        style: { stroke: '#6366f1', strokeWidth: 1.5 },
+        data: { source: 'trigger', target: firstStep.id },
+        type: 'customEdge', animated: false,
+        style: { stroke: '#c5cdd6', strokeWidth: 1.5, strokeDasharray: '6 4' },
       });
     }
   }

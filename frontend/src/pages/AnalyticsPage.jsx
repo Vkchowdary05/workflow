@@ -25,9 +25,9 @@ const AnalyticsPage = () => {
         <div style={{ color: '#ef4444' }}>Failed to load analytics.</div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-          <StatCard title="Total Workflows" value={summary.total_workflows ?? 0} />
           <StatCard title="Total Executions" value={summary.total_executions ?? 0} />
-          <StatCard title="Success Rate" value={`${summary.success_rate?.toFixed(1) ?? 0}%`} color="#16a34a" />
+          <StatCard title="Successful" value={summary.successful_executions ?? 0} />
+          <StatCard title="Success Rate" value={`${summary.success_rate ?? 0}%`} color="#16a34a" />
           <StatCard title="Failed Executions" value={summary.failed_executions ?? 0} color="#dc2626" />
         </div>
       )}

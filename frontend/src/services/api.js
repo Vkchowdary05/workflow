@@ -21,8 +21,9 @@ export const workflowAPI = {
 };
 
 export const analyticsAPI = {
-  getSummary:      ()          => api.get('/api/analytics'),
-  getWorkflowStats:(id)        => api.get(`/api/analytics/workflows/${id}`),
+  getSummary:      (period='week') => api.get('/api/analytics/summary', { params: { period } }),
+  getWorkflowStats:(id, period)    => api.get(`/api/analytics/workflows/${id}`, { params: { period } }),
+  recordEvent:     (d)             => api.post('/api/analytics/events', d),
 };
 
 export const templatesAPI = {

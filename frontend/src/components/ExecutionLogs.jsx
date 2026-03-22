@@ -27,6 +27,20 @@ const ExecutionLogs = ({ currentWorkflowId, compact }) => {
     setDetails(null);
   }, [currentWorkflowId]);
 
+  useEffect(() => {
+    const handleExecuted = async (e) => {
+      const { executionId } = e.detail;
+      if (currentWorkflowId) {
+        await fetchExecutions();
+        if (executionId) {
+          loadDetails(executionId);
+        }
+      }
+    };
+    window.addEventListener('workflow-executed', handleExecuted);
+    return () => window.removeEventListener('workflow-executed', handleExecuted);
+  }, [currentWorkflowId]);
+
   const loadDetails = async (execId) => {
     try {
       setSelectedExec(execId);
@@ -122,10 +136,20 @@ const ExecutionLogs = ({ currentWorkflowId, compact }) => {
               <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Step Logs:</div>
               {(details.step_logs ?? []).map((log, i) => (
                 <div key={i} className="log-row">
-                  <div className={`log-dot log-${log.status}`} />
+                  <div className={`log-dot log-${log.status}-dot`} />
                   <div className="log-body">
                     <div className="log-label">{log.label ?? log.step_id}</div>
                     <div className="log-message">{log.message}</div>
+                    {log.entity && Object.keys(log.entity).length > 0 && (
+                      <div style={{
+                        marginTop: 4, fontSize: 10, color: 'var(--accent-blue)',
+                        background: '#eff6ff', padding: '3px 7px', borderRadius: 4,
+                        border: '1px solid #bfdbfe',
+                      }}>
+                        {log.entity.contact_name && `👤 ${log.entity.contact_name} (${log.entity.contact_email || ''})`}
+                        {log.entity.opportunity_name && `💼 ${log.entity.opportunity_name}`}
+                      </div>
+                    )}
                   </div>
                   <span className={`log-badge log-badge-${log.status}`}>{log.status}</span>
                   <span className="log-time">{new Date(log.timestamp).toLocaleTimeString()}</span>

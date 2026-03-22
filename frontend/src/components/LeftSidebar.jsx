@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, Mail, MessageSquare, Phone, Tag, User, Briefcase, ArrowRight, GitBranch, Clock, Zap } from 'lucide-react';
 import ContactsPanel from './ContactsPanel';
 import OpportunitiesPanel from './OpportunitiesPanel';
@@ -70,6 +70,17 @@ function PaletteCard({ item }) {
 export default function LeftSidebar({ showToast, workflowId }) {
   const [search, setSearch]       = useState('');
   const [activeTab, setActiveTab] = useState('contacts');
+
+  useEffect(() => {
+    const handleExecuted = (e) => {
+      const { entityType } = e.detail;
+      if (entityType === 'contact') setActiveTab('contacts');
+      else if (entityType === 'opportunity') setActiveTab('opps');
+      else setActiveTab('logs');
+    };
+    window.addEventListener('workflow-executed', handleExecuted);
+    return () => window.removeEventListener('workflow-executed', handleExecuted);
+  }, []);
 
   const filtered = PALETTE_SECTIONS.map(s => ({
     ...s,

@@ -21,8 +21,9 @@ logger = logging.getLogger("workflow.execution")
 MAX_STEPS = 100
 
 
-async def execute_workflow(workflow: dict) -> dict:
+async def execute_workflow(workflow: dict, trigger_data: dict | None = None) -> dict:
     from datetime import datetime, timezone
+    import uuid
     start_time = datetime.now(timezone.utc)
     """
     Execute the given workflow and return the execution record (dict).
@@ -37,6 +38,55 @@ async def execute_workflow(workflow: dict) -> dict:
     steps = workflow.get("steps", [])
     trigger = workflow.get("trigger", {})
 
+    # ── Auto-create trigger entity ────────────────────────────────
+    # When executed manually (Run Test), create real data based on trigger type
+    created_entity = {}
+    if trigger_data is None:
+        trigger_data = {}
+    
+    trigger_type = trigger.get("type", "unknown")
+    
+    if trigger_type == "contact_created" and not trigger_data.get("contact_id"):
+        from app.repositories import contact_repo
+        import random, string
+        suffix = ''.join(random.choices(string.ascii_lowercase, k=5))
+        test_contact = await contact_repo.create({
+            "name":  f"Test Contact {suffix.upper()}",
+            "email": f"test_{suffix}@example.com",
+            "phone": f"+1555{random.randint(1000000,9999999)}",
+            "tags":  ["test", "workflow-execution"],
+        })
+        created_entity = {
+            "contact_id":    str(test_contact["_id"]),
+            "contact_email": test_contact["email"],
+            "contact_name":  test_contact["name"],
+            "contact_phone": test_contact["phone"],
+        }
+        trigger_data = {**trigger_data, **created_entity}
+    
+    elif trigger_type == "pipeline_stage_changed" and not trigger_data.get("opportunity_id"):
+        from app.repositories import contact_repo, opportunity_repo
+        import random, string
+        suffix = ''.join(random.choices(string.ascii_lowercase, k=5))
+        test_contact = await contact_repo.create({
+            "name":  f"Deal Contact {suffix.upper()}",
+            "email": f"deal_{suffix}@example.com",
+            "phone": f"+1555{random.randint(1000000,9999999)}",
+            "tags":  ["test", "workflow-execution"],
+        })
+        test_opp = await opportunity_repo.create({
+            "name":       f"Test Opportunity {suffix.upper()}",
+            "contact_id": str(test_contact["_id"]),
+            "stage":      "new",
+        })
+        created_entity = {
+            "opportunity_id":   str(test_opp["_id"]),
+            "opportunity_name": test_opp["name"],
+            "contact_id":       str(test_contact["_id"]),
+            "contact_name":     test_contact["name"],
+        }
+        trigger_data = {**trigger_data, **created_entity}
+
     # Build a lookup map: step_id → step dict
     step_map: dict[str, dict] = {step["id"]: step for step in steps}
 
@@ -44,14 +94,22 @@ async def execute_workflow(workflow: dict) -> dict:
     overall_status = "success"
 
     # ── Log the trigger ──
+    trigger_msg = f"Trigger fired: {trigger_type}"
+    if created_entity:
+        if "contact_name" in created_entity and "opportunity_name" not in created_entity:
+            trigger_msg += f" — created contact: {created_entity['contact_name']} ({created_entity.get('contact_email','')})"
+        elif "opportunity_name" in created_entity:
+            trigger_msg += f" — created opportunity: {created_entity['opportunity_name']}"
+
     step_logs.append({
         "step_id": "trigger",
         "step_type": "trigger",
         "action_type": None,
-        "label": trigger.get("label", trigger.get("type", "trigger")),
+        "label": trigger.get("label", trigger_type),
         "status": "success",
-        "message": f"Trigger fired: {trigger.get('type', 'unknown')}",
+        "message": trigger_msg,
         "timestamp": datetime.now(timezone.utc),
+        "entity": created_entity,
     })
 
     # ── Determine first step ──
@@ -62,11 +120,11 @@ async def execute_workflow(workflow: dict) -> dict:
             "step_type": "system",
             "action_type": None,
             "label": "Engine",
-            "status": "failed",
-            "message": "No steps to execute after trigger.",
+            "status": "success",
+            "message": "Workflow execution completed (no steps).",
             "timestamp": datetime.now(timezone.utc),
         })
-        overall_status = "failed"
+        overall_status = "success"
     else:
         # ── Walk the DAG ──
         visited_count = 0
@@ -88,9 +146,12 @@ async def execute_workflow(workflow: dict) -> dict:
                 break
 
             step_type = step.get("type", "action")
-            action_type = step.get("action_type")
+            action_type = step.get("action_type", "")
             label = step.get("label", current_step_id)
-            config = step.get("config", {})
+            
+            # Priority logic: trigger_data overwrites config, always injecting contact_id etc.
+            config = step.get("config") or {}
+            config = {**config, **trigger_data}
 
             logger.info(f"▶ Executing step '{current_step_id}' ({step_type})")
 
@@ -128,6 +189,8 @@ async def execute_workflow(workflow: dict) -> dict:
         "workflow_id": workflow_id,
         "status": overall_status,
         "step_logs": step_logs,
+        "trigger_data": trigger_data,
+        "created_entity": created_entity,
     }
     execution = await execution_repo.create(execution_data)
     
